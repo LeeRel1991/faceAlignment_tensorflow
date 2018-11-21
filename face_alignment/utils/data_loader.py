@@ -8,7 +8,7 @@
 @contact: r.li@bmi-tech.com
 @site: 
 @software: PyCharm
-@file: datas_loader.py
+@file: data_loader.py
 @time: 18-11-16 下午4:38
 @brief： 
 """
@@ -21,18 +21,29 @@ import tensorflow as tf
 
 
 class LandmarkDataset:
-    def __init__(self, root, verbose=False):
+    def __init__(self, root, db_names=None, verbose=False):
+        """A dataset for loading image files stored in a folder structure like::
+
+        root/AFW/afw_0001.jpg
+        root/AFW/afw_0001.pts
+        root/HELEN/helen_0001.jpg
+        root/HELEN/helen_0001.pts
+        root/IBUG/ibug_0001.jpg
+        root/IBUG/ibug_0001.pts
+        
+        Args:
+            root: 
+            db_names: 
+            verbose: 
+        """
+
         self._root = os.path.expanduser(root)
+        self._db_names = db_names
         self._verbose = verbose
         self._exts = ['.jpg', '.jpeg', '.png']
         self._items = self._list_images(self._root)
 
     def __call__(self, batch_size, shuffle, repeat_num):
-        """
-        :param batch_size: 
-        :param shuffle: 
-        :return: 
-        """
 
         dataset = tf.data.Dataset.from_tensor_slices(self._items)
 
@@ -49,7 +60,10 @@ class LandmarkDataset:
 
     def _list_images(self, root):
         items = []
-        for folder in sorted(os.listdir(root)):
+
+        self._db_names = [x for x in os.listdir(root)] if self._db_names is None else self._db_names
+
+        for folder in sorted(self._db_names):
             path = os.path.join(root, folder)
             print("lodat dataset: %s" % folder)
 
@@ -90,7 +104,9 @@ class LandmarkDataset:
 
 
 class ArrayDataset:
+
     def __init__(self, dataset_name):
+
         self.data = np.load(dataset_name)
 
     def __call__(self, batch_size, shuffle, repeat_num):
@@ -118,18 +134,22 @@ class ArrayDataset:
     def __len__(self):
         return self.data["imgs"].shape[0]
 
+
+
+
 if __name__ == '__main__':
     # dataset = LandmarkDataset("/media/lirui/Personal/DeepLearning/FaceRec/LBF3000fps/datasets/train")
-    dataset = ArrayDataset('/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/dataset_nimgs=20000_perturbations=[0.2, 0.2, 20, 0.25]_size=[112, 112].npz')
-    train_data = dataset(batch_size=12, shuffle=True, repeat_num=1)
-    print("len ", len(dataset))
-    next_element = train_data.make_one_shot_iterator().get_next()
-    with tf.Session() as sess:
-        try:
-            while True:
-                img, pts = sess.run(next_element)
-                print(img.shape, pts.shape)
+    # dataset = ArrayDataset('/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/dataset_nimgs=20000_perturbations=[0.2, 0.2, 20, 0.25]_size=[112, 112].npz')
+    # train_data = dataset(batch_size=12, shuffle=True, repeat_num=1)
+    # print("len ", len(dataset))
+    # next_element = train_data.make_one_shot_iterator().get_next()
+    # with tf.Session() as sess:
+    #     try:
+    #         while True:
+    #             img, pts = sess.run(next_element)
+    #             print(img.shape, pts.shape)
+    #
+    #     except tf.errors.OutOfRangeError:
+    #         pass
 
-        except tf.errors.OutOfRangeError:
-            pass
-
+    vis_dataset()

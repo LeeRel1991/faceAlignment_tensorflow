@@ -184,7 +184,8 @@ def vgg_block(x, num_convs, num_channels, scope=None, is_training=True):
             with arg_scope([tcl.conv2d],
                            padding="SAME",
                            normalizer_fn=tcl.batch_norm,
-                           activation_fn=tf.nn.relu, ):
+                           activation_fn=tf.nn.relu,
+                           weights_initializer=tf.glorot_uniform_initializer()):
                 se = x
                 for i in range(num_convs):
                     se = tcl.conv2d(se, num_outputs=num_channels, kernel_size=3, stride=1)
@@ -200,29 +201,13 @@ class VGGModel:
 
 
 class MultiVGG:
-    def __init__(self, mean_shape, stage=1, resolution_inp=112, channel=1, name='multivgg'):
+    def __init__(self, mean_shape, num_lmk=68, stage=1, img_size=112, channel=1, name='multivgg'):
         self.name = name
         self.channel = channel
-        self.resolution_inp = resolution_inp
+        self.img_size = img_size
         self.stage = stage
+        self.num_lmk = num_lmk
         self.mean_shape = tf.constant(mean_shape, dtype=tf.float32)
-
-    def store(self, sess, save_model):
-        if self.stage == 1:
-            tf.train.Saver(self.vars).save(sess, save_model + "-Stage%d" % self.stage)
-        else:
-            tf.train.Saver(self.vars).save(sess, save_model)
-
-    def restore(self, sess, pretrain_model):
-        print("ss", pretrain_model)
-        if "Stage1" in pretrain_model:
-            stage1_vars = [var for var in tf.global_variables() if "Stage1" in var.name]
-            for v in stage1_vars:
-                print(v)
-            tf.train.Saver(stage1_vars).restore(sess, pretrain_model)
-
-        else:
-            tf.train.Saver(self.vars).restore(sess, pretrain_model)
 
     def _vgg_model(self, x, is_training=True, name="vgg"):
         """
@@ -233,30 +218,31 @@ class MultiVGG:
         :return: 
         """
         with tf.variable_scope(name):
-            s1_conv1 = vgg_block(x, 2, 64, is_training=is_training)
-            s1_conv2 = vgg_block(s1_conv1, 2, 128, is_training=is_training)
-            s1_conv3 = vgg_block(s1_conv2, 2, 256, is_training=is_training)
-            s1_conv4 = vgg_block(s1_conv3, 2, 512, is_training=is_training)
+            conv1 = vgg_block(x, 2, 64, is_training=is_training)
+            conv2 = vgg_block(conv1, 2, 128, is_training=is_training)
+            conv3 = vgg_block(conv2, 2, 256, is_training=is_training)
+            conv4 = vgg_block(conv3, 2, 512, is_training=is_training)
 
-            s1_pool4_flat = tf.contrib.layers.flatten(s1_conv4)
-            s1_dropout = tf.layers.dropout(s1_pool4_flat, 0.5, training=is_training)
+            pool4_flat = tf.contrib.layers.flatten(conv4)
+            dropout = tf.layers.dropout(pool4_flat, 0.5, training=is_training)
 
-            s1_fc1 = tf.layers.dense(s1_dropout, 256, activation=tf.nn.relu)
-            s1_fc1 = tcl.batch_norm(s1_fc1, is_training=is_training)
+            fc1 = tf.layers.dense(dropout, 256, activation=tf.nn.relu,
+                                     kernel_initializer=tf.glorot_uniform_initializer())
+            fc1 = tcl.batch_norm(fc1, is_training=is_training)
 
-            return s1_fc1
+            return fc1
 
-    def __call__(self, x, is_training=True):
+    def __call__(self, x, s1_istrain=False, s2_istrain=False):
         """
         
         :param x: tensor of shape [batch, 112, 112, 1] 
-        :param is_training: 
+        :param s1_istrain: 
         :return: 
         """
         # todo: fc -> avgglobalpool
         with tf.variable_scope(self.name):
             with tf.variable_scope('Stage1'):
-                s1_fc1 = self._vgg_model(x, is_training)
+                s1_fc1 = self._vgg_model(x, s1_istrain)
                 s1_fc2 = tf.layers.dense(s1_fc1, N_LANDMARK * 2, activation=None)
                 s1_out = s1_fc2 + self.mean_shape
 
@@ -268,22 +254,29 @@ class MultiVGG:
 
                 featuremap = tf.layers.dense(s1_fc1,
                                              int((IMGSIZE / 2) * (IMGSIZE / 2)),
-                                             activation=tf.nn.relu)
+                                             activation=tf.nn.relu,
+                                             kernel_initializer=tf.glorot_uniform_initializer())
                 featuremap = tf.reshape(featuremap, (-1, int(IMGSIZE / 2), int(IMGSIZE / 2), 1))
                 featuremap = tf.image.resize_images(featuremap, (IMGSIZE, IMGSIZE), 1)
 
                 s2_inputs = tf.concat([affined_img, heatmap, featuremap], 3)
-                s2_inputs = tf.layers.batch_normalization(s2_inputs, training=is_training)
+                s2_inputs = tf.layers.batch_normalization(s2_inputs, training=s2_istrain)
 
                 # vgg archive
-                s2_fc1 = self._vgg_model(s2_inputs, is_training)
-                s2_fc2 = tf.layers.dense(s2_fc1, N_LANDMARK * 2, activation=None)
+                s2_fc1 = self._vgg_model(s2_inputs, s2_istrain)
+                s2_fc2 = tf.layers.dense(s2_fc1, N_LANDMARK * 2)
+
                 s2_out = LandmarkTransformLayer(s2_fc2 + last_out, affine_param, inverse=True)
 
-            if self.stage == 1:
-                return s1_out
-            else:
-                return s2_out
+            Ret_dict = {}
+            Ret_dict['S1_Ret'] = s1_out
+            Ret_dict['S2_Ret'] = s2_out
+
+            Ret_dict['S2_InputImage'] = affined_img
+            Ret_dict['S2_InputLandmark'] = last_out
+            Ret_dict['S2_InputHeatmap'] = heatmap
+            Ret_dict['S2_FeatureUpScale'] = featuremap
+            return Ret_dict
 
     @property
     def trainable_vars(self):
@@ -296,20 +289,22 @@ class MultiVGG:
 
 if __name__ == '__main__':
     mean_shape = np.load("/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/initLandmarks.npy")
-    model = MultiVGG(mean_shape, stage=2, resolution_inp=112, channel=1)
+    model = MultiVGG(mean_shape, stage=2, img_size=112, channel=1)
     batch_size = 4
     x = tf.placeholder(tf.float32, shape=(1, 112, 112, 1))
     data = np.random.random((batch_size, 112, 112, 1))
 
     y = model(x)
-    for v in model.vars:
-        print(v)
+    # for v in model.vars:
+    #     print(v)
 
     print("out", y)
 
-    with tf.Session() as sess:
+    for v in tf.get_collection(tf.GraphKeys.UPDATE_OPS, 'multivgg/Stage1'):
+        print(v)
+    # with tf.Session() as sess:
         # sess.run(tf.global_variables_initializer())
-        tf.train.Saver(model.vars).restore(sess, "../model/dan_112")
-        kpts = sess.run(y, feed_dict={x: data})
-        print(y.shape)
+        # tf.train.Saver(model.vars).restore(sess, "../model/dan_112")
+        # kpts = sess.run(y, feed_dict={x: data})
+        # print(y.shape)
 
