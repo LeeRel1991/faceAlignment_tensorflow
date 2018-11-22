@@ -30,8 +30,9 @@ _gpu_opts = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_mem_frac,
                           allow_growth=True)
 
 global_steps = tf.Variable(tf.constant(0), trainable=False)
-learning_rate = tf.train.piecewise_constant(global_steps, [1000, 2000, 3000, 5000],
-                                            [0.001, 0.0005, 0.0001, 0.00001])
+
+learning_rate = tf.train.piecewise_constant(global_steps, [1000, 2000, 3000],
+                                            [0.001, 0.0005, 0.0001])
 # learning_rate = tf.train.exponential_decay(0.001, global_steps, 100, 0.96, staircase=True)
 
 
@@ -63,11 +64,12 @@ def train(model, pretrained_model, train_data, val_data, batch_size):
                                           var_list=s1_trainable_vars,
                                           global_step=global_steps)
 
-    with tf.control_dependencies(s2_upt_ops):
-        s2_optimizer = optimizer.minimize(s2_loss,
-                                          var_list=s2_trainable_vars,
-                                          global_step=global_steps)
+    # with tf.control_dependencies(s2_upt_ops):
+    #     s2_optimizer = optimizer.minimize(s2_loss,
+    #                                       var_list=s2_trainable_vars,
+    #                                       global_step=global_steps)
 
+    s2_optimizer = None
     train_op = s1_optimizer if model.stage < 2 else s2_optimizer
     loss = s1_loss if model.stage < 2 else s2_loss
     saver = tf.train.Saver(model.vars)
@@ -110,7 +112,7 @@ def train(model, pretrained_model, train_data, val_data, batch_size):
             print("valid err = {}".format(err))
             print("finished!")
 
-        saver.save(sess, "../../model/dan_112")
+        saver.save(sess, "../../model/dan_112-resnet")
 
 
 if __name__ == '__main__':
@@ -120,14 +122,19 @@ if __name__ == '__main__':
     dataset = ArrayDataset('../../data/dataset_nimgs=20000_perturbations=[0.2, 0.2, 20, 0.25]_size=[112, 112].npz')
 
     val_dataset = ArrayDataset("/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/challengingSet.npz")
+
     print("total samples: ", len(dataset))
     batch_size = 32
-    num_epochs = 5
+    num_epochs = 10
     train_data = dataset(batch_size=batch_size, shuffle=True, repeat_num=num_epochs)
+
     val_data = val_dataset(batch_size=len(val_dataset), shuffle=False, repeat_num=1)
+    print("valid num ", len(val_dataset))
 
     mean_shape = np.load("../../data/initLandmarks.npy")
-    model = MultiVGG(mean_shape, stage=1, img_size=112, channel=1)
+    # model = MultiVGG(mean_shape, stage=1, img_size=112, channel=1)
+    model = ResnetDAN(mean_shape, stage=1, img_size=112, channel=1)
 
     train(model, "", train_data, val_data, batch_size)
-    # train(model, "../../model/dan_112", train_data, val_data, batch_size)
+    # train(model, "../../model/dan_112-resnet", train_data, val_data, batch_size)
+

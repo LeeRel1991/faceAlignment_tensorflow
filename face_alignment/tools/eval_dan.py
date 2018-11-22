@@ -19,7 +19,7 @@ import numpy as np
 import time
 import cv2
 
-from face_alignment.model_zoo.dan import MultiVGG
+from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN
 from face_alignment.model_zoo.loss import norm_mrse_loss
 from face_alignment.utils.data_loader import ArrayDataset
 
@@ -31,8 +31,8 @@ _gpu_opts = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_mem_frac,
 
 
 def validate(model, pretrained_model, val_data, size, metric):
-    x_placeholder = tf.placeholder(tf.float32, shape=(1, model.img_size, model.img_size, model.channel))
-    gt_placeholder = tf.placeholder(tf.float32, shape=(1, model.num_lmk, 2))
+    x_placeholder = tf.placeholder(tf.float32, shape=(None, model.img_size, model.img_size, model.channel))
+    gt_placeholder = tf.placeholder(tf.float32, shape=(None, model.num_lmk, 2))
     dan = model(x_placeholder, s1_istrain=False, s2_istrain=False)
 
     iterator_op = val_data.make_initializable_iterator()
@@ -66,7 +66,7 @@ def validate(model, pretrained_model, val_data, size, metric):
             for s,t in kpts.reshape((-1, 2)):
                 img = cv2.circle(img, (int(s), int(t)), 1, (0), 2)
             cv2.imshow("out", img)
-            cv2.waitKey(200)
+            cv2.waitKey(100)
 
             print('The mean error for image {} is: {}'.format(iter, test_err))
         errs = np.array(errs)
@@ -74,12 +74,14 @@ def validate(model, pretrained_model, val_data, size, metric):
 
 if __name__ == '__main__':
 
-    # test_dataset = ArrayDataset("/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/challengingSet.npz")
-    test_dataset = ArrayDataset('../../data/dataset_nimgs=20000_perturbations=[0.2, 0.2, 20, 0.25]_size=[112, 112].npz')
+    test_dataset = ArrayDataset("/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/challengingSet.npz")
+    # test_dataset = ArrayDataset('../../data/dataset_nimgs=20000_perturbations=[0.2, 0.2, 20, 0.25]_size=[112, 112].npz')
     test_data = test_dataset(batch_size=1, shuffle=False, repeat_num=1)
     nSamples = len(test_dataset)
 
-    stage = 2
+    print("valid num ", nSamples)
+    stage = 1
     mean_shape = np.load("../../data/initLandmarks.npy")
-    model = MultiVGG(mean_shape, stage=stage, img_size=112, channel=1)
-    validate(model, '../../model/dan_112', test_data, nSamples, norm_mrse_loss)
+    # model = MultiVGG(mean_shape, stage=stage, img_size=112, channel=1)
+    model = ResnetDAN(mean_shape, stage=1, img_size=112, channel=1)
+    validate(model, '../../model/dan_112-resnet', test_data, nSamples, norm_mrse_loss)
