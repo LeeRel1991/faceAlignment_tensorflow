@@ -20,7 +20,7 @@ import numpy as np
 import cv2
 import time
 
-from face_alignment.model_zoo.dan import MultiVGG
+from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN
 from face_alignment.model_zoo.loss import norm_mrse_loss
 
 gpu_mem_frac = 0.4
@@ -32,14 +32,15 @@ _gpu_opts = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_mem_frac,
 global_steps = tf.Variable(tf.constant(0), trainable=False)
 learning_rate = tf.train.piecewise_constant(global_steps, [1000, 2000, 3000, 5000],
                                             [0.001, 0.0005, 0.0001, 0.00001])
+# learning_rate = tf.train.exponential_decay(0.001, global_steps, 100, 0.96, staircase=True)
 
 
-def train(model, pretrained_model, train_data, val_dataset, batch_size):
+def train(model, pretrained_model, train_data, val_data, batch_size):
     iterator_op = train_data.make_initializable_iterator()
     next_element = iterator_op.get_next()
 
-    x = tf.placeholder(tf.float32, shape=(batch_size, model.img_size, model.img_size, model.channel))
-    gt = tf.placeholder(tf.float32, shape=(batch_size, model.num_lmk, 2))
+    x = tf.placeholder(tf.float32, shape=(None, model.img_size, model.img_size, model.channel))
+    gt = tf.placeholder(tf.float32, shape=(None, model.num_lmk, 2))
 
     dan = model(x, True, False) if model.stage < 2 else model(x, False, True)
 
@@ -71,14 +72,18 @@ def train(model, pretrained_model, train_data, val_dataset, batch_size):
     loss = s1_loss if model.stage < 2 else s2_loss
     saver = tf.train.Saver(model.vars)
 
+    tf.summary.scalar("loss", loss)
+    merged = tf.summary.merge_all()
     with tf.Session(config=tf.ConfigProto(gpu_options=_gpu_opts)) as sess:
-        # sumary_writer = tf.summary.FileWriter("../../logs", sess.graph)
+        sumary_writer = tf.summary.FileWriter("../../logs", sess.graph)
 
         sess.run(tf.global_variables_initializer())
         sess.run(iterator_op.initializer)
 
         if pretrained_model:
             saver.restore(sess, pretrained_model)
+
+        xvalid, yvalid = sess.run(val_data.make_one_shot_iterator().get_next())
 
         try:
             while True:
@@ -88,15 +93,21 @@ def train(model, pretrained_model, train_data, val_dataset, batch_size):
 
                 tic = time.time()
 
-                _, loss_value = sess.run([train_op, loss], feed_dict={x: img_batch, gt: gt_batch})
+                summary, _, loss_value = sess.run([merged, train_op, loss], feed_dict={x: img_batch, gt: gt_batch})
 
                 duration = time.time() - tic
                 lr, steps = sess.run([learning_rate, global_steps])
-
+                sumary_writer.add_summary(summary)
                 if steps % 50 == 0:
-                    print("Iter: {}, Lr: {:.5f}, Loss: {:.4f}, spend: {:.4f}s".format(steps, lr, loss_value, duration))
+                    print("Iter: {}, Lr: {}, Loss: {:.4f}, spend: {:.4f}s".format(steps, lr, loss_value, duration))
+
+                if steps % 200 == 0:
+                    err = sess.run(loss, feed_dict={x: xvalid, gt: yvalid})
+                    print("valid err = {}".format(err))
 
         except tf.errors.OutOfRangeError:
+            err = sess.run(loss, feed_dict={x: xvalid, gt: yvalid})
+            print("valid err = {}".format(err))
             print("finished!")
 
         saver.save(sess, "../../model/dan_112")
@@ -108,13 +119,15 @@ if __name__ == '__main__':
     # dataset = LandmarkDataset(dataset_dir)
     dataset = ArrayDataset('../../data/dataset_nimgs=20000_perturbations=[0.2, 0.2, 20, 0.25]_size=[112, 112].npz')
 
+    val_dataset = ArrayDataset("/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/challengingSet.npz")
     print("total samples: ", len(dataset))
     batch_size = 32
     num_epochs = 5
     train_data = dataset(batch_size=batch_size, shuffle=True, repeat_num=num_epochs)
+    val_data = val_dataset(batch_size=len(val_dataset), shuffle=False, repeat_num=1)
 
     mean_shape = np.load("../../data/initLandmarks.npy")
-    model = MultiVGG(mean_shape, stage=2, img_size=112, channel=1)
+    model = MultiVGG(mean_shape, stage=1, img_size=112, channel=1)
 
-    # train(model, "", train_data, None, batch_size)
-    train(model, "../../model/dan_112", train_data, None, batch_size)
+    train(model, "", train_data, val_data, batch_size)
+    # train(model, "../../model/dan_112", train_data, val_data, batch_size)
