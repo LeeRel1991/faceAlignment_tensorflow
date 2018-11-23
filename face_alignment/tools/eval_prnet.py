@@ -20,8 +20,8 @@ import time
 import cv2
 
 from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN, MobilenetDAN
-from face_alignment.model_zoo.loss import norm_mrse_loss
-from face_alignment.utils.data_loader import ArrayDataset
+from face_alignment.model_zoo.loss import norm_mrse_loss, landmark_err
+from face_alignment.utils.data_loader import ArrayDataset, AFLW2000Dataset
 
 gpu_mem_frac = 0.4
 gpu_id = 0
@@ -32,16 +32,16 @@ _gpu_opts = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_mem_frac,
 
 def validate(model, pretrained_model, val_data, size, metric):
     x_placeholder = tf.placeholder(tf.float32, shape=(None, model.img_size, model.img_size, model.channel))
-    gt_placeholder = tf.placeholder(tf.float32, shape=(None, model.num_lmk, 2))
-    dan = model(x_placeholder, s1_istrain=False, s2_istrain=False)
+    gt_placeholder = tf.placeholder(tf.float32, shape=(None, 68, 2))
+    y_pred = model(x_placeholder, is_training=False)
 
     iterator_op = val_data.make_initializable_iterator()
     next_element = iterator_op.get_next()
 
-    y_pred = dan["S%d_Ret" % model.stage]
-    y_pred = tf.reshape(y_pred, (-1, model.num_lmk, 2))
+    index = np.loadtxt("/media/lirui/Personal/DeepLearning/FaceRec/PRNet/data/uv-data/uv_kpt_ind_vec.txt").astype(np.int32)
 
-    cost = metric(gt_placeholder, y_pred)
+    y_pred = tf.reshape(y_pred, (-1, 256**2, 3))
+    print("out ", y_pred)
 
     with tf.Session(config=tf.ConfigProto(gpu_options=_gpu_opts)) as sess:
         saver = tf.train.Saver(model.vars)
@@ -52,38 +52,37 @@ def validate(model, pretrained_model, val_data, size, metric):
         errs = []
 
         sess.run(iterator_op.initializer)
-        for iter in range(size):
+        for i in range(size):
             img_batch, gt_batch = sess.run(next_element)
-
+            in_batch = img_batch/255.
             tic = time.time()
 
-            test_err, kpts = sess.run([cost, y_pred],
-                                      feed_dict={x_placeholder: img_batch, gt_placeholder: gt_batch})
+            kpts = sess.run(y_pred, feed_dict={x_placeholder: in_batch})
+            kpts = kpts[0, index, :2]
+            test_err = metric(gt_batch[0], kpts)
+
             errs.append(test_err)
 
             print("time ", time.time() - tic)
-            img = np.squeeze(img_batch)
+            img = np.squeeze(img_batch).astype(np.uint8)
             for s,t in kpts.reshape((-1, 2)):
                 img = cv2.circle(img, (int(s), int(t)), 1, (0), 2)
             cv2.imshow("out", img)
-            cv2.waitKey(100)
+            cv2.waitKey(10)
 
-            print('The mean error for image {} is: {}'.format(iter, test_err))
+            print('The mean error for image {} is: {}'.format(i, test_err))
         errs = np.array(errs)
         print('The overall mean error is: {}'.format(np.mean(errs)))
 
 if __name__ == '__main__':
-
-    test_dataset = ArrayDataset("/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/challengingSet.npz")
-    # test_dataset = ArrayDataset('../../data/dataset_nimgs=20000_perturbations=[0.2, 0.2, 20, 0.25]_size=[112, 112].npz')
+    from face_alignment.model_zoo.prnet import Resfcn256
+    test_dataset = AFLW2000Dataset("/media/lirui/Personal/DeepLearning/FaceRec/LBF3000fps/datasets")
     test_data = test_dataset(batch_size=1, shuffle=False, repeat_num=1)
     nSamples = len(test_dataset)
 
     print("valid num ", nSamples)
     stage = 2
-    mean_shape = np.load("../../data/initLandmarks.npy")
-    # model = MultiVGG(mean_shape, stage=stage, img_size=112, channel=1)
-    # model = ResnetDAN(mean_shape, stage=1, img_size=112, channel=1)
-    model = MobilenetDAN(mean_shape, stage=1, img_size=112, channel=1)
 
-    validate(model, '../../model/dan_112-mobilenet', test_data, nSamples, norm_mrse_loss)
+    model = Resfcn256(256, 3)
+    validate(model, '/media/lirui/Personal/DeepLearning/FaceRec/PRNet/data/net-data/256_256_resfcn256_weight',
+             test_data, nSamples, landmark_err)

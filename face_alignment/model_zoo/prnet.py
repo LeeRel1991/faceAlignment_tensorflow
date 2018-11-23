@@ -38,10 +38,10 @@ def resBlock(x, num_outputs, kernel_size=4, stride=1, activation_fn=tf.nn.relu, 
 
 
 class Resfcn256(object):
-    def __init__(self, resolution_inp=256, resolution_op=256, channel=3, name='resfcn256'):
+    def __init__(self, img_size=256, resolution_op=256, channel=3, name='resfcn256'):
         self.name = name
         self.channel = channel
-        self.resolution_inp = resolution_inp
+        self.img_size = img_size
         self.resolution_op = resolution_op
 
     def __call__(self, x, is_training=True):
@@ -88,7 +88,7 @@ class Resfcn256(object):
                     pos = tcl.conv2d_transpose(pd, 3, 4, stride=1,
                                                activation_fn=tf.nn.sigmoid)  # , padding='SAME', weights_initializer=tf.random_normal_initializer(0, 0.02))
 
-                    # pos = pos * 256*1.1
+                    pos = pos * 256*1.1
                     # pos = tf.reshape(pos, (-1, self.resolution_op**2, 3, 1))
                     return pos
 
