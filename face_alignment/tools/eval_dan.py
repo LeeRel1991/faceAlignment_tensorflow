@@ -19,7 +19,7 @@ import numpy as np
 import time
 import cv2
 
-from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN
+from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN, MobilenetDAN
 from face_alignment.model_zoo.loss import norm_mrse_loss
 from face_alignment.utils.data_loader import ArrayDataset
 
@@ -80,8 +80,10 @@ if __name__ == '__main__':
     nSamples = len(test_dataset)
 
     print("valid num ", nSamples)
-    stage = 1
+    stage = 2
     mean_shape = np.load("../../data/initLandmarks.npy")
     # model = MultiVGG(mean_shape, stage=stage, img_size=112, channel=1)
-    model = ResnetDAN(mean_shape, stage=1, img_size=112, channel=1)
-    validate(model, '../../model/dan_112-resnet', test_data, nSamples, norm_mrse_loss)
+    # model = ResnetDAN(mean_shape, stage=1, img_size=112, channel=1)
+    model = MobilenetDAN(mean_shape, stage=1, img_size=112, channel=1)
+
+    validate(model, '../../model/dan_112-mobilenet', test_data, nSamples, norm_mrse_loss)

@@ -20,7 +20,7 @@ import numpy as np
 import cv2
 import time
 
-from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN
+from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN, MobilenetDAN
 from face_alignment.model_zoo.loss import norm_mrse_loss
 
 gpu_mem_frac = 0.4
@@ -64,12 +64,12 @@ def train(model, pretrained_model, train_data, val_data, batch_size):
                                           var_list=s1_trainable_vars,
                                           global_step=global_steps)
 
-    # with tf.control_dependencies(s2_upt_ops):
-    #     s2_optimizer = optimizer.minimize(s2_loss,
-    #                                       var_list=s2_trainable_vars,
-    #                                       global_step=global_steps)
+    with tf.control_dependencies(s2_upt_ops):
+        s2_optimizer = optimizer.minimize(s2_loss,
+                                          var_list=s2_trainable_vars,
+                                          global_step=global_steps)
 
-    s2_optimizer = None
+    # s2_optimizer = None
     train_op = s1_optimizer if model.stage < 2 else s2_optimizer
     loss = s1_loss if model.stage < 2 else s2_loss
     saver = tf.train.Saver(model.vars)
@@ -112,7 +112,7 @@ def train(model, pretrained_model, train_data, val_data, batch_size):
             print("valid err = {}".format(err))
             print("finished!")
 
-        saver.save(sess, "../../model/dan_112-resnet")
+        saver.save(sess, "../../model/dan_112-mobilenet")
 
 
 if __name__ == '__main__':
@@ -125,7 +125,7 @@ if __name__ == '__main__':
 
     print("total samples: ", len(dataset))
     batch_size = 32
-    num_epochs = 10
+    num_epochs = 5
     train_data = dataset(batch_size=batch_size, shuffle=True, repeat_num=num_epochs)
 
     val_data = val_dataset(batch_size=len(val_dataset), shuffle=False, repeat_num=1)
@@ -133,8 +133,9 @@ if __name__ == '__main__':
 
     mean_shape = np.load("../../data/initLandmarks.npy")
     # model = MultiVGG(mean_shape, stage=1, img_size=112, channel=1)
-    model = ResnetDAN(mean_shape, stage=1, img_size=112, channel=1)
+    # model = ResnetDAN(mean_shape, stage=1, img_size=112, channel=1)
+    model = MobilenetDAN(mean_shape, stage=2, img_size=112, channel=1)
 
-    train(model, "", train_data, val_data, batch_size)
-    # train(model, "../../model/dan_112-resnet", train_data, val_data, batch_size)
+    # train(model, "", train_data, val_data, batch_size)
+    train(model, "../../model/dan_112-mobilenet", train_data, val_data, batch_size)
 
