@@ -10,7 +10,7 @@
 @software: PyCharm
 @file: data_loader.py
 @time: 18-11-16 下午4:38
-@brief： 
+@brief： dataset inference for train/eval with tf.data API, 
 """
 import warnings
 
@@ -18,52 +18,75 @@ import cv2
 import os
 import numpy as np
 import tensorflow as tf
+from scipy import io as sio
 
 
-class LandmarkDataset:
-    def __init__(self, root, db_names=None, verbose=False):
-        """A dataset for loading image files stored in a folder structure like::
+class FileDataset():
+    def __init__(self, root, db_names=None, preprocess=None, verbose=False):
+        self.root = os.path.expanduser(root)
+        self.db_names = os.listdir(root) if db_names is None else db_names
 
-        root/AFW/afw_0001.jpg
-        root/AFW/afw_0001.pts
-        root/HELEN/helen_0001.jpg
-        root/HELEN/helen_0001.pts
-        root/IBUG/ibug_0001.jpg
-        root/IBUG/ibug_0001.pts
-        
-        Args:
-            root: 
-            db_names: 
-            verbose: 
-        """
-
-        self._root = os.path.expanduser(root)
-        self._db_names = db_names
-        self._verbose = verbose
-        self._exts = ['.jpg', '.jpeg', '.png']
-        self._items = self._list_images(self._root)
+        self.verbose = verbose
+        self.exts = ['.jpg', '.jpeg', '.png']
+        self.preprocess = preprocess
+        self.items = self.list_images(self.root)
 
     def __call__(self, batch_size, shuffle, repeat_num):
+        imgs, gt = self.items
 
-        dataset = tf.data.Dataset.from_tensor_slices(self._items)
+        img_dataset = tf.data.Dataset.from_tensor_slices(imgs)
+        gt_dataset = tf.data.Dataset.from_tensor_slices(gt)
+        dataset = tf.data.Dataset.zip((img_dataset, gt_dataset))
 
         if shuffle:
             dataset = dataset.shuffle(buffer_size=1000)
 
-        map_fun = lambda x: tuple(tf.py_func(self._decode_img_pts, [x], [tf.float32, tf.float32]))
-        dataset = dataset.map(map_fun, num_parallel_calls=8)
+        map_fun = lambda x, y: tuple(tf.py_func(self.load_sample_lable, [x, y], [tf.float32, tf.float32]))
+        dataset = dataset.map(map_fun, num_parallel_calls=1)
 
         dataset = dataset.batch(batch_size).repeat(repeat_num)
         dataset = dataset.prefetch(1)
 
         return dataset
 
-    def _list_images(self, root):
-        items = []
+    def __len__(self):
+        return len(self.items[0])
 
-        self._db_names = [x for x in os.listdir(root)] if self._db_names is None else self._db_names
+    def list_images(self, root):
+        raise NotImplementedError
 
-        for folder in sorted(self._db_names):
+    def load_sample_lable(self, img_file, label_file):
+        raise NotImplementedError
+
+
+class PtsDataset(FileDataset):
+    def __init__(self, root, db_names=None, transform=None, verbose=False):
+        """A dataset like 300W for loading image files stored in a folder structure like::
+
+        300W/afw/afw_0001.jpg
+        300W/afw/afw_0001.pts
+        300W/helen/trainset/helen_0001.jpg
+        300W/helen/trainset/helen_0001.pts
+        300W/ibug/ibug_0001.jpg
+        300W/ibug/ibug_0001.pts
+        300W/lfpw/lfpw_0001.jpg
+        300W/lfpw/lfpw_0001.pts
+        See Also https://ibug.doc.ic.ac.uk/resources/300-W_IMAVIS/
+        Args:
+            root: 
+            db_names: 
+            verbose: 
+        """
+
+        super(PtsDataset, self).__init__(root, db_names, transform, verbose)
+
+    def list_images(self, root):
+        img_files = []
+        pts_files = []
+
+        self.db_names = [x for x in os.listdir(root)] if self.db_names is None else self.db_names
+
+        for folder in sorted(self.db_names):
             path = os.path.join(root, folder)
             print("lodat dataset: %s" % folder)
 
@@ -74,7 +97,7 @@ class LandmarkDataset:
             for img_file in sorted(os.listdir(path)):
                 img_file = os.path.join(path, img_file)
                 file_name, ext = os.path.splitext(img_file)
-                if ext.lower() not in self._exts:
+                if ext.lower() not in self.exts:
                     # warnings.warn('Ignoring %s of type %s. Only support %s' % (filename, ext, ', '.join(self._exts)))
                     continue
 
@@ -82,32 +105,164 @@ class LandmarkDataset:
                 if not os.path.exists(pts_file):
                     # warnings.warn("uv map does not exists. %s" % posmap_file)
                     continue
-                items.append(img_file)
+                img_files.append(img_file)
+                pts_files.append(pts_file)
 
-        return items
+        return img_files, pts_files
 
-    def __len__(self):
-        return len(self._items)
+    def load_sample_lable(self, img_file, pts_file):
+        if self.verbose:
+            print("load file: ", img_file)
 
-    def _decode_img_pts(self, img_file):
         img_file = img_file.decode("utf-8")
-        pts_file = os.path.splitext(img_file)[0] + ".pts"
+        pts_file = pts_file.decode("utf-8")
 
-        img = cv2.imread(img_file, 0).astype(np.float32)
-        mu = np.mean(img)
-        std = np.std(img)
-        img = (img - mu) / std
-        img = img[:, :, np.newaxis]
-        pts = np.loadtxt(pts_file, dtype=np.float32, delimiter=',')
+        img = cv2.imread(img_file).astype(np.float32)
+        kpt = np.genfromtxt(pts_file, skip_header=3, skip_footer=1, dtype=np.float32)
 
-        return img, pts
+        if self.preprocess:
+            img, kpt = self.preprocess(img, kpt)
+
+        return img, kpt
+
+
+class AFLW2000Dataset(FileDataset):
+    def __init__(self, root, db_names=["AFLW2000"], transform=None, verbose=False):
+        """A dataset for loading image files stored in a folder structure like::
+
+        root/AFLW2000/image00001.jpg
+        root/AFLW2000/image00001.mat
+        See Also http://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/main.htm
+        Args:
+            root: 
+            db_names: 
+            verbose: 
+        """
+        super(AFLW2000Dataset, self).__init__(root, db_names, transform, verbose)
+
+    def list_images(self, root):
+        img_files = []
+        mat_files = []
+
+        for folder in sorted(self.db_names):
+            path = os.path.join(root, folder)
+            print("lodat dataset: %s" % folder)
+
+            if not os.path.isdir(path):
+                warnings.warn('Ignoring %s, which is not a directory.' % path, stacklevel=3)
+                continue
+
+            for img_file in sorted(os.listdir(path)):
+                img_file = os.path.join(path, img_file)
+                file_name, ext = os.path.splitext(img_file)
+                if ext.lower() not in self.exts:
+                    # warnings.warn('Ignoring %s of type %s. Only support %s' % (filename, ext, ', '.join(self._exts)))
+                    continue
+
+                mat_file = file_name + ".mat"
+                if not os.path.exists(mat_file):
+                    # warnings.warn("uv map does not exists. %s" % posmap_file)
+                    continue
+                img_files.append(img_file)
+                mat_files.append(mat_file)
+
+        return img_files, mat_files
+
+    def load_sample_lable(self, img_file, label_file):
+        if self.verbose:
+            print("load file: ", img_file)
+
+        img_file = img_file.decode("utf-8")
+        label_file = label_file.decode("utf-8")
+
+        img = np.array(cv2.imread(img_file), dtype=np.float32)
+        info = sio.loadmat(label_file)
+        kpt = info['pt3d_68'][:2, :]
+        kpt = np.transpose(kpt, (1, 0)).astype(np.float32)
+
+        if self.preprocess:
+            img, kpt = self.preprocess(img, kpt)
+
+        return img, kpt
+
+
+class LP300W_Dataset(FileDataset):
+    def __init__(self, root, db_names=None, transform=None, verbose=False):
+        """A dataset like 300W-LP for loading image files stored in a folder structure like::
+
+        root/AFW/image00001.jpg
+        root/AFW/image00001.mat
+        root/AFW_Flip/image00001.jpg
+        root/AFW_Flip/image00001.mat
+        root/landmarks/AFW/image00001.mat
+        See Also http://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/main.htm
+        Args:
+            root: 
+            db_names: 
+            verbose: 
+        """
+
+        super(LP300W_Dataset, self).__init__(root, db_names, transform, verbose)
+
+    def list_images(self, root):
+        img_files = []
+        mat_files = []
+
+        # 删除无效子目录
+        for d in ["Code", "landmarks"]:
+            if d in self.db_names: self.db_names.remove(d)
+
+        for folder in sorted(self.db_names):
+            path = os.path.join(root, folder)
+            print("lodat dataset: %s" % folder)
+
+            if not os.path.isdir(path):
+                warnings.warn('Ignoring %s, which is not a directory.' % path, stacklevel=3)
+                continue
+
+            for img_file in sorted(os.listdir(path)):
+                abs_imgname = os.path.join(root, folder, img_file)
+                file_name, ext = os.path.splitext(img_file)
+                if ext.lower() not in self.exts:
+                    # warnings.warn('Ignoring %s of type %s. Only support %s' % (filename, ext, ', '.join(self._exts)))
+                    continue
+
+                mat_file = os.path.join(root, "landmarks", folder, file_name + "_pts.mat")
+                if "_Flip" in folder:
+                    mat_file = mat_file.replace("_Flip", "")
+
+                if not os.path.exists(mat_file):
+                    # warnings.warn("uv map does not exists. %s" % posmap_file)
+                    continue
+                img_files.append(abs_imgname)
+                mat_files.append(mat_file)
+
+        return img_files, mat_files
+
+    def load_sample_lable(self, img_file, label_file):
+        if self.verbose:
+            print("load file: ", img_file)
+
+        img_file = img_file.decode("utf-8")
+        label_file = label_file.decode("utf-8")
+
+        img = np.array(cv2.imread(img_file, 1), dtype=np.float32)
+        info = sio.loadmat(label_file)
+        kpt = info['pts_3d'].astype(np.float32)
+        if "_Flip" in img_file:
+            kpt[:, 0] = img.shape[1] - kpt[:, 0]
+        return img, kpt
 
 
 class ArrayDataset:
+    """
+    See Also https://github.com/mariolew/Deep-Alignment-Network-tensorflow/blob/master/DAN-TF/TrainingSetPreparation.py
+    """
 
     def __init__(self, dataset_name):
 
-        self.data = np.load(dataset_name)
+        data = np.load(dataset_name)
+        self.items = data["imgs"], data['gtLandmarks']
 
     def __call__(self, batch_size, shuffle, repeat_num):
         """
@@ -115,10 +270,8 @@ class ArrayDataset:
         :param shuffle: 
         :return: 
         """
-        imgs = self.data["imgs"]
-        gt = self.data['gtLandmarks']
-        num = imgs.shape[0]
-        # gt = gt.reshape(num, -1)
+        imgs, gt = self.items
+
         img_dataset = tf.data.Dataset.from_tensor_slices(imgs)
         gt_dataset = tf.data.Dataset.from_tensor_slices(gt)
         dataset = tf.data.Dataset.zip((img_dataset, gt_dataset))
@@ -132,199 +285,7 @@ class ArrayDataset:
         return dataset
 
     def __len__(self):
-        return self.data["imgs"].shape[0]
-
-
-from scipy import io as sio
-
-
-class AFLW2000Dataset:
-    def __init__(self, root, db_names=["AFLW2000"], verbose=False):
-        """A dataset for loading image files stored in a folder structure like::
-
-        root/AFLW2000/image00001.jpg
-        root/AFLW2000/image00001.mat
-
-        Args:
-            root: 
-            db_names: 
-            verbose: 
-        """
-
-        self._root = os.path.expanduser(root)
-        self._db_names = db_names
-        self._verbose = verbose
-        self._exts = ['.jpg']
-        self._items = self._list_images(self._root)
-
-    def __call__(self, batch_size, shuffle, repeat_num):
-
-        dataset = tf.data.Dataset.from_tensor_slices(self._items)
-
-        if shuffle:
-            dataset = dataset.shuffle(buffer_size=1000)
-
-        map_fun = lambda x: tuple(tf.py_func(self._decode_img_pts, [x], [tf.float32, tf.float32]))
-        dataset = dataset.map(map_fun, num_parallel_calls=1)
-
-        dataset = dataset.batch(batch_size).repeat(repeat_num)
-        dataset = dataset.prefetch(1)
-
-        return dataset
-
-    def _list_images(self, root):
-        items = []
-
-        self._db_names = [x for x in os.listdir(root)] if self._db_names is None else self._db_names
-
-        for folder in sorted(self._db_names):
-            path = os.path.join(root, folder)
-            print("lodat dataset: %s" % folder)
-
-            if not os.path.isdir(path):
-                warnings.warn('Ignoring %s, which is not a directory.' % path, stacklevel=3)
-                continue
-
-            for img_file in sorted(os.listdir(path)):
-                img_file = os.path.join(path, img_file)
-                file_name, ext = os.path.splitext(img_file)
-                if ext.lower() not in self._exts:
-                    # warnings.warn('Ignoring %s of type %s. Only support %s' % (filename, ext, ', '.join(self._exts)))
-                    continue
-
-                pts_file = file_name + ".mat"
-                if not os.path.exists(pts_file):
-                    # warnings.warn("uv map does not exists. %s" % posmap_file)
-                    continue
-                items.append(img_file)
-
-        return items
-
-    def __len__(self):
-        return len(self._items)
-
-    def _decode_img_pts(self, img_file):
-        if self._verbose:
-            print("load file: ", img_file)
-
-        img_file = img_file.decode("utf-8")
-        mat_file = os.path.splitext(img_file)[0] + ".mat"
-
-        img = np.array(cv2.imread(img_file, 1), dtype=np.float32)
-        info = sio.loadmat(mat_file)
-        kpt = info['pt3d_68'][:2, :]
-        kpt = np.transpose(kpt, (1, 0)).astype(np.float32)
-
-        x1, y1 = np.min(kpt, axis=0)
-        x2, y2 = np.max(kpt, axis=0)
-        w, h = x2 - x1, y2 - y1
-
-        old_size = (w + h) / 2
-        center = np.array([x2 - w / 2.0, y2 - h / 2.0])
-        size = int(old_size * 1.4)
-
-        new_x1, new_y1 = [max(0, int(v - size / 2)) for v in center]
-        new_y2, new_x2 = tuple(map(lambda v, max_v: min(max_v, v + size), [new_y1, new_x1], img.shape[:2]))
-        face_img = img[int(new_y1): int(new_y2), int(new_x1): int(new_x2), :]
-        face_img = cv2.resize(face_img, (256, 256))
-
-        new_kpt = np.copy(kpt)
-        new_kpt[:, 0] = new_kpt[:, 0] - new_x1
-        new_kpt[:, 1] = new_kpt[:, 1] - new_y1
-        new_kpt = new_kpt * 256 / size
-
-        return face_img, new_kpt
-
-
-class LP300W_Dataset:
-    def __init__(self, root, db_names=None, verbose=False):
-        """A dataset for loading image files stored in a folder structure like::
-
-        root/AFW/image00001.jpg
-        root/AFW/image00001.mat
-        root/AFW_Flip/image00001.jpg
-        root/AFW_Flip/image00001.mat
-        root/landmarks/AFW/image00001.mat
-        Args:
-            root: 
-            db_names: 
-            verbose: 
-        """
-
-        self._root = os.path.expanduser(root)
-        self._db_names = db_names
-        self._verbose = verbose
-        self._exts = ['.jpg']
-        self._items = self._list_images(self._root)
-
-    def __call__(self, batch_size, shuffle, repeat_num):
-
-        dataset = tf.data.Dataset.from_tensor_slices(self._items)
-
-        if shuffle:
-            dataset = dataset.shuffle(buffer_size=1000)
-
-        map_fun = lambda x: tuple(tf.py_func(self._decode_img_pts, [x], [tf.float32, tf.float32]))
-        dataset = dataset.map(map_fun, num_parallel_calls=1)
-
-        dataset = dataset.batch(batch_size).repeat(repeat_num)
-        dataset = dataset.prefetch(1)
-
-        return dataset
-
-    def _list_images(self, root):
-        items = []
-
-        if self._db_names is None:
-            self._db_names = [x for x in os.listdir(root)]
-            self._db_names.remove("Code")
-            self._db_names.remove("landmarks")
-
-        for folder in sorted(self._db_names):
-            path = os.path.join(root, folder)
-            print("lodat dataset: %s" % folder)
-
-            if not os.path.isdir(path):
-                warnings.warn('Ignoring %s, which is not a directory.' % path, stacklevel=3)
-                continue
-
-            for img_file in sorted(os.listdir(path)):
-                abs_imgname = os.path.join(root, folder, img_file)
-                file_name, ext = os.path.splitext(img_file)
-                if ext.lower() not in self._exts:
-                    # warnings.warn('Ignoring %s of type %s. Only support %s' % (filename, ext, ', '.join(self._exts)))
-                    continue
-
-                mat_file = os.path.join(root, "landmarks", folder, file_name + "_pts.mat")
-                if not os.path.exists(mat_file):
-                    # warnings.warn("uv map does not exists. %s" % posmap_file)
-                    continue
-                items.append(abs_imgname)
-
-        return items
-
-    def __len__(self):
-        return len(self._items)
-
-    def _decode_img_pts(self, img_file):
-        if self._verbose:
-            print("load file: ", img_file)
-
-        img_file = img_file.decode("utf-8")
-
-        folder, base_name = os.path.split(img_file)
-        db_name = os.path.split(folder)[-1]
-        mat_file = os.path.splitext(base_name)[0] + "_pts.mat"
-        lmk_dir = os.path.join(self._root, "landmarks")
-        mat_file = os.path.join(lmk_dir, db_name, mat_file)
-        if "_Flip" in db_name:
-            mat_file = mat_file.replace("_Flip", "")
-
-        img = np.array(cv2.imread(img_file, 1), dtype=np.float32)
-        info = sio.loadmat(mat_file)
-        kpt = info['pts_3d'].astype(np.float32)
-
-        return img, kpt
+        return len(self.items[0])
 
 
 if __name__ == '__main__':
