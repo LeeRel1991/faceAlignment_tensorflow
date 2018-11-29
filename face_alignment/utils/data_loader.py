@@ -42,7 +42,7 @@ class FileDataset():
             dataset = dataset.shuffle(buffer_size=1000)
 
         map_fun = lambda x, y: tuple(tf.py_func(self.load_sample_lable, [x, y], [tf.float32, tf.float32]))
-        dataset = dataset.map(map_fun, num_parallel_calls=1)
+        dataset = dataset.map(map_fun, num_parallel_calls=8)
 
         dataset = dataset.batch(batch_size).repeat(repeat_num)
         dataset = dataset.prefetch(1)
@@ -251,6 +251,9 @@ class LP300W_Dataset(FileDataset):
         kpt = info['pts_3d'].astype(np.float32)
         if "_Flip" in img_file:
             kpt[:, 0] = img.shape[1] - kpt[:, 0]
+
+        if self.preprocess:
+            img, kpt = self.preprocess(img, kpt)
         return img, kpt
 
 
