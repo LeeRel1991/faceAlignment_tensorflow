@@ -19,6 +19,8 @@ from face_alignment.utils.cv2_utils import plot_kpt
 import numpy as np
 import tensorflow as tf
 
+from face_alignment.utils.data_cropper import ImageCropper
+
 
 def vis_dataset(dataset):
     train_data = dataset(batch_size=1, shuffle=False, repeat_num=1)
@@ -28,12 +30,12 @@ def vis_dataset(dataset):
         try:
             while True:
                 img, kpt = sess.run(next_element)
-                # print(img.shape, kpts.shape)
+                # print(img.shape, kpt.shape)
                 img = np.squeeze(img)
                 kpt = np.squeeze(kpt)
 
-                cv2.imshow("out", plot_kpt(img.astype(np.uint8), kpt))
-                cv2.waitKey(0)
+                cv2.imshow("out", plot_kpt(img, kpt))
+                cv2.waitKey(100)
 
         except tf.errors.OutOfRangeError:
             pass
@@ -43,12 +45,16 @@ def vis_dataset(dataset):
 
 
 if __name__ == '__main__':
-    from face_alignment.utils.data_utils import crop_by_kpt
-    # dataset = PtsDataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W",
-    #                      ["afw", "helen/trainset"],
-    #                      transform=crop_by_kpt, verbose=True)
-    dataset = ArrayDataset('../../data/dataset_nimgs=20000_perturbations=[0.2, 0.2, 20, 0.25]_size=[112, 112].npz')
+
+    cropper = ImageCropper((112, 112), 1.4, True, True)
+
+    dataset_dir = "/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W_Augment"
+    dataset = PtsDataset(dataset_dir,
+                         ["afw", 'helen/trainset', "lfpw/trainset"],
+                         transform=cropper, verbose=False)
+    # dataset = ArrayDataset('../../data/dataset_nimgs=100_perturbations=[]_size=[112, 112].npz')
     # dataset = AFLW2000Dataset("/media/lirui/Personal/DeepLearning/FaceRec/LBF3000fps/datasets", verbose=True)
-    # dataset = LP300W_Dataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W_LP", ["AFW_Flip"], verbose=True)
+    # dataset = LP300W_Dataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W_LP", ["AFW"],
+    #                          transform=cropper, verbose=True)
     print("n sample ", len(dataset))
     vis_dataset(dataset)
