@@ -209,6 +209,9 @@ class MultiVGG:
         self.num_lmk = num_lmk
         self.mean_shape = tf.constant(mean_shape, dtype=tf.float32)
 
+    def __str__(self):
+        return "dan_vgg_%d" % self.img_size
+
     def _vgg_model(self, x, is_training=True, name="vgg"):
         """
         basic vgg model
@@ -296,6 +299,9 @@ class ResnetDAN:
         self.num_lmk = num_lmk
         self.mean_shape = tf.constant(mean_shape, dtype=tf.float32)
 
+    def __str__(self):
+        return "dan_resnet_%d" % self.img_size
+
     def _res_blk(self, x, num_outputs, kernel_size, stride=1, scope=None):
         with tf.variable_scope(scope, "resBlk"):
             small_ch = num_outputs // 2
@@ -326,41 +332,78 @@ class ResnetDAN:
                     with tf.variable_scope('Stage1'):
                         y = tcl.conv2d(x, 32, 3, 1, padding="SAME")
 
-                        # y = self._res_blk(x, 32, 3, stride=1)
-                        # y = self._res_blk(y, 32, 3, stride=1)
-                        # y = self._res_blk(y, 32, 3, stride=1)
-
                         y = self._res_blk(y, 64, 3, stride=2)
                         y = self._res_blk(y, 64, 3, stride=1)
-                        # y = self._res_blk(y, 64, 3, stride=1)
 
                         y = self._res_blk(y, 128, 3, stride=2)
                         y = self._res_blk(y, 128, 3, stride=1)
-                        # y = self._res_blk(y, 128, 3, stride=1)
 
                         y = self._res_blk(y, 256, 3, stride=2)
                         y = self._res_blk(y, 256, 3, stride=1)
-                        # y = self._res_blk(y, 256, 3, stride=1)
 
                         y = self._res_blk(y, 512, 3, stride=2)
                         y = self._res_blk(y, 512, 3, stride=1)
                         y = self._res_blk(y, 512, 3, stride=1)
 
-                        avg_pool = tf.nn.avg_pool(y, [1, 7, 7, 1], strides=[1, 1, 1, 1], padding="VALID")
-                        flatten = tf.layers.flatten(avg_pool)
+                        s1_fc1 = tf.nn.avg_pool(y, [1, 7, 7, 1], strides=[1, 1, 1, 1], padding="VALID")
+                        flatten = tf.layers.flatten(s1_fc1)
 
                         s1_fc = tf.layers.dense(flatten, N_LANDMARK * 2, activation=None)
                         s1_out = s1_fc + self.mean_shape
 
-                        Ret_dict = {}
-                        Ret_dict['S1_Ret'] = s1_out
-                        Ret_dict['S2_Ret'] = s1_out
+            with arg_scope([tcl.batch_norm], is_training=s2_istrain, scale=True):
+                with arg_scope([tcl.conv2d, tcl.separable_conv2d],
+                               padding="SAME",
+                               normalizer_fn=tcl.batch_norm,
+                               activation_fn=tf.nn.relu,
+                               weights_initializer=tf.glorot_uniform_initializer()):
+                    with tf.variable_scope('Stage2'):
+                        affine_param = TransformParamsLayer(s1_out, self.mean_shape)
+                        affined_img = AffineTransformLayer(x, affine_param)
+                        last_out = LandmarkTransformLayer(s1_out, affine_param)
+                        heatmap = LandmarkImageLayer(last_out)
 
-                        # Ret_dict['S2_InputImage'] = affined_img
-                        # Ret_dict['S2_InputLandmark'] = last_out
-                        # Ret_dict['S2_InputHeatmap'] = heatmap
-                        # Ret_dict['S2_FeatureUpScale'] = featuremap
-                        return Ret_dict
+                        featuremap = tf.layers.dense(s1_fc1,
+                                                     int((IMGSIZE / 2) * (IMGSIZE / 2)),
+                                                     activation=tf.nn.relu,
+                                                     kernel_initializer=tf.glorot_uniform_initializer())
+                        featuremap = tf.reshape(featuremap, (-1, int(IMGSIZE / 2), int(IMGSIZE / 2), 1))
+                        featuremap = tf.image.resize_images(featuremap, (IMGSIZE, IMGSIZE), 1)
+
+                        s2_inputs = tf.concat([affined_img, heatmap, featuremap], 3)
+                        s2_inputs = tcl.batch_norm(s2_inputs)
+
+                        y = tcl.conv2d(s2_inputs, 32, 3, 1, padding="SAME")
+
+                        y = self._res_blk(y, 64, 3, stride=2)
+                        y = self._res_blk(y, 64, 3, stride=1)
+
+                        y = self._res_blk(y, 128, 3, stride=2)
+                        y = self._res_blk(y, 128, 3, stride=1)
+
+                        y = self._res_blk(y, 256, 3, stride=2)
+                        y = self._res_blk(y, 256, 3, stride=1)
+
+                        y = self._res_blk(y, 512, 3, stride=2)
+                        y = self._res_blk(y, 512, 3, stride=1)
+                        y = self._res_blk(y, 512, 3, stride=1)
+
+                        s2_fc1 = tcl.avg_pool2d(y, 7, stride=1)
+                        flatten = tcl.flatten(s2_fc1)
+                        # dropout = tcl.dropout(flatten, keep_prob=0.5, is_training=s2_istrain)
+                        s2_fc2 = tf.layers.dense(flatten, units=N_LANDMARK * 2, activation=None)
+
+                        s2_out = LandmarkTransformLayer(s2_fc2 + last_out, affine_param, inverse=True)
+
+            Ret_dict = {}
+            Ret_dict['S1_Ret'] = s1_out
+            Ret_dict['S2_Ret'] = s2_out
+
+            # Ret_dict['S2_InputImage'] = affined_img
+            # Ret_dict['S2_InputLandmark'] = last_out
+            # Ret_dict['S2_InputHeatmap'] = heatmap
+            # Ret_dict['S2_FeatureUpScale'] = featuremap
+            return Ret_dict
 
     @property
     def trainable_vars(self):
@@ -379,6 +422,9 @@ class MobilenetDAN:
         self.stage = stage
         self.num_lmk = num_lmk
         self.mean_shape = tf.constant(mean_shape, dtype=tf.float32)
+
+    def __str__(self):
+        return "dan_mobilenet_%d" % self.img_size
 
     def _depthwise_separable_conv(self, x, num_outputs, kernel_size=3, stride=1, scope=None):
         with tf.variable_scope(scope, "dw_blk"):
@@ -487,6 +533,8 @@ if __name__ == '__main__':
     mean_shape = np.load("/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/initLandmarks.npy")
     # model = MultiVGG(mean_shape, stage=2, img_size=112, channel=1)
     model = ResnetDAN(mean_shape, stage=1, img_size=112, channel=1)
+
+    print("model %s" %model)
     batch_size = 4
     x = tf.placeholder(tf.float32, shape=(1, 112, 112, 1))
     data = np.random.random((batch_size, 112, 112, 1))

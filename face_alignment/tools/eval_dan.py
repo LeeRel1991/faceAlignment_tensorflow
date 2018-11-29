@@ -21,7 +21,8 @@ import cv2
 
 from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN, MobilenetDAN
 from face_alignment.model_zoo.loss import norm_mrse_loss
-from face_alignment.utils.data_loader import ArrayDataset
+from face_alignment.utils.data_loader import ArrayDataset, PtsDataset, AFLW2000Dataset
+from face_alignment.utils.data_cropper import dan_preprocess, ImageCropper
 
 gpu_mem_frac = 0.4
 gpu_id = 0
@@ -30,21 +31,22 @@ _gpu_opts = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_mem_frac,
                           allow_growth=True)
 
 
-def validate(model, pretrained_model, val_data, size, metric):
-    x_placeholder = tf.placeholder(tf.float32, shape=(None, model.img_size, model.img_size, model.channel))
-    gt_placeholder = tf.placeholder(tf.float32, shape=(None, model.num_lmk, 2))
-    dan = model(x_placeholder, s1_istrain=False, s2_istrain=False)
+def validate(net, pretrained_model, val_data, size, metric):
+    x_placeholder = tf.placeholder(tf.float32, shape=(None, net.img_size, net.img_size, net.channel))
+    gt_placeholder = tf.placeholder(tf.float32, shape=(None, net.num_lmk, 2))
+    dan = net(x_placeholder, s1_istrain=False, s2_istrain=False)
 
     iterator_op = val_data.make_initializable_iterator()
     next_element = iterator_op.get_next()
 
-    y_pred = dan["S%d_Ret" % model.stage]
-    y_pred = tf.reshape(y_pred, (-1, model.num_lmk, 2))
+    y_pred = dan["S%d_Ret" % net.stage]
+    y_pred = tf.reshape(y_pred, (-1, net.num_lmk, 2))
 
     cost = metric(gt_placeholder, y_pred)
 
     with tf.Session(config=tf.ConfigProto(gpu_options=_gpu_opts)) as sess:
-        saver = tf.train.Saver(model.vars)
+        tf.get_variable_scope().reuse_variables()
+        saver = tf.train.Saver(net.vars)
         # Writer = tf.summary.FileWriter("logs/", sess.graph)
 
         saver.restore(sess, pretrained_model)
@@ -66,24 +68,37 @@ def validate(model, pretrained_model, val_data, size, metric):
             for s,t in kpts.reshape((-1, 2)):
                 img = cv2.circle(img, (int(s), int(t)), 1, (0), 2)
             cv2.imshow("out", img)
-            cv2.waitKey(100)
+            cv2.waitKey(50)
 
             print('The mean error for image {} is: {}'.format(iter, test_err))
         errs = np.array(errs)
         print('The overall mean error is: {}'.format(np.mean(errs)))
 
 if __name__ == '__main__':
+    cropper = ImageCropper((112, 112), 1.4, True, True)
 
-    test_dataset = ArrayDataset("/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/challengingSet.npz")
-    # test_dataset = ArrayDataset('../../data/dataset_nimgs=20000_perturbations=[0.2, 0.2, 20, 0.25]_size=[112, 112].npz')
-    test_data = test_dataset(batch_size=1, shuffle=False, repeat_num=1)
-    nSamples = len(test_dataset)
+    common_dataset = PtsDataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W",
+                                ["helen/testset", "lfpw/testset"],
+                                transform=dan_preprocess)
+    challenge_dataset = PtsDataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W",
+                                   ["ibug"],
+                                   transform=dan_preprocess)
+    aflw2000 = AFLW2000Dataset("/media/lirui/Personal/DeepLearning/FaceRec/LBF3000fps/datasets",
+                                   transform=dan_preprocess,
+                                   verbose=False)
 
-    print("valid num ", nSamples)
-    stage = 2
+    stage = 1
     mean_shape = np.load("../../data/initLandmarks.npy")
-    # model = MultiVGG(mean_shape, stage=stage, img_size=112, channel=1)
-    # model = ResnetDAN(mean_shape, stage=1, img_size=112, channel=1)
-    model = MobilenetDAN(mean_shape, stage=1, img_size=112, channel=1)
 
-    validate(model, '../../model/dan_112-mobilenet', test_data, nSamples, norm_mrse_loss)
+    for d in [common_dataset, challenge_dataset, aflw2000]:
+        test_data = d(batch_size=1, shuffle=False, repeat_num=1)
+        nSamples = len(d)
+
+        print("valid num ", nSamples)
+        net = MultiVGG(mean_shape, stage=stage, img_size=112, channel=1)
+        # net = ResnetDAN(mean_shape, stage=stage, img_size=112, channel=1)
+        # net = MobilenetDAN(mean_shape, stage=1, img_size=112, channel=1)
+
+        validate(net, '../../model/%s_300WAugment' % net, test_data, nSamples, norm_mrse_loss)
+
+
