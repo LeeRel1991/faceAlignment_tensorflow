@@ -101,7 +101,16 @@ class LandmarkMetric:
         self.norm_type = norm_type
 
     def __call__(self, y, y_hat):
-        avg_ptp_dis = np.mean(np.linalg.norm(y, y_hat, axis=1))
+        """
+        
+        Args:
+            y: np.array, [N_landmark, 2] 
+            y_hat: np.array, [N_Landmark, 2]
+
+        Returns:
+
+        """
+        avg_ptp_dis = np.mean(np.linalg.norm(y - y_hat, axis=1))
         norm_dist = 1
 
         if self.norm_type == NormalizeFactor.OCULAR or self.norm_type == NormalizeFactor.PUPIL:
@@ -109,8 +118,10 @@ class LandmarkMetric:
 
         if self.norm_type == NormalizeFactor.PUPIL:
             norm_dist = np.linalg.norm(np.mean(y[36:42], axis=0) - np.mean(y_hat[42:48], axis=0))
+
         elif self.norm_type == NormalizeFactor.OCULAR:
             norm_dist = np.linalg.norm(y[36] - y_hat[45])
+
         elif self.norm_type == NormalizeFactor.DIAGONAL:
             height, width = np.max(y, axis=0) - np.min(y_hat, axis=0)
             norm_dist = np.sqrt(width ** 2 + height ** 2)
