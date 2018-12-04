@@ -149,7 +149,8 @@ if __name__ == '__main__':
 
     cropper = ImageCropper((112, 112), 1.4, True, True)
 
-    dataset_dir = "/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W_Augment"
+    dataset_name = "300W_Augment"
+    dataset_dir = "/media/lirui/Personal/DeepLearning/FaceRec/datasets/%s" % dataset_name
     dataset = PtsDataset(dataset_dir,
                          ["afw", 'helen/trainset', "lfpw/trainset"],
                          transform=dan_preprocess, verbose=False)
@@ -161,7 +162,7 @@ if __name__ == '__main__':
     #                                             [0.001, 0.0005, 0.0001])
     learning_rate = tf.train.exponential_decay(0.001, global_steps, 1000, 0.96, staircase=True)
 
-    stage = 1
+    stage = 2
     logger.addLog("total samples: %d" % len(dataset))
     logger.addLog("config: batch_size: %d\n num_epochs:%d\nstage: %d\n" % (batch_size, num_epochs, stage))
 
@@ -175,6 +176,11 @@ if __name__ == '__main__':
     # net = ResnetDAN(mean_shape, stage=stage, img_size=112, channel=1)
     # net = MobilenetDAN(mean_shape, stage=stage, img_size=112, channel=1)
 
-    out_path = "../../model/%s_%s" % (net, "300WAugment")
-    train(net, "", train_data, None, out_path)
-    # train(net, "../../model/%s_300WLP" % model, train_data, None)
+    out_path = "../../model/%s_%s" % (net, dataset_name)
+
+    logger.addLog("train %s @ stage %d\nsave path: %s" % (net,stage, out_path))
+    if net.stage < 2:
+        train(net, "", train_data, None, out_path)
+    else:
+        # 训练stage2时已经有stage训练好的结果，可从out_path中直接恢复stage1训练好的数据
+        train(net, out_path, train_data, None, out_path)
