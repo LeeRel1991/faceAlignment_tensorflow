@@ -58,7 +58,7 @@ class ImageCropper:
         old_size = (w + h) / 2
         center = np.array([x2 - w / 2.0, y2 - h / 2.0])
         size = int(old_size * scale)
-        print("bbx ", x1, y1, x2, y2, center, size)
+        # print("bbx ", x1, y1, x2, y2, center, size)
         new_x1, new_y1 = [v - size / 2 for v in center]
         new_y2, new_x2 = [v + size for v in [new_y1, new_x1]]
         new_x1, new_x2, new_y1, new_y2 = tuple(map(int, [new_x1, new_x2, new_y1, new_y2]))
@@ -76,17 +76,25 @@ class ImageCropper:
         Returns:
 
         """
+
+        img = img.astype(np.float32)
+        # 彩色图像通过除以255 进行规范化
+        if len(img.shape) > 2:
+            for ch in range(img.shape[2]):
+                img[:,:, ch] = cls.image_normalization(img[:,:,ch], 0, 255.0)
+            return img
+
         if mu is None: mu = np.mean(img)
         if std is None: std = np.std(img)
         return (img - mu) / std
 
     def __call__(self, img, kpt):
-        x1, y1 = np.min(kpt, axis=0)
-        x2, y2 = np.max(kpt, axis=0)
+        x1, y1 = np.min(kpt, axis=0).astype(np.int32)
+        x2, y2 = np.max(kpt, axis=0).astype(np.int32)
         if self.bbox_scale != 1:
             x1, y1, x2, y2 = self.rescale_bbox((x1, y1, x2, y2), self.bbox_scale)
             x1, y1 = [max(v, 0) for v in (x1, y1)]
-            x2, y2 = [max(v, m) for v, m in zip([x2, y2], img.shape[::-1])]
+            x2, y2 = [min(v, m) for v, m in zip([x2, y2], img.shape[:2][::-1])]
 
         face_img = img[y1:y2, x1:x2, :]
         face_img = cv2.resize(face_img, self.out_size)
@@ -100,13 +108,12 @@ class ImageCropper:
 
         if self.gray:
             face_img = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
-            face_img = face_img[:,:,np.newaxis]
+            face_img = face_img[:, :, np.newaxis]
 
         if self.normalization:
             face_img = self.image_normalization(face_img)
 
         return face_img, new_kpt
-        # return img, kpt
 
 
 def dan_preprocess(img, kpt):
