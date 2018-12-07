@@ -21,6 +21,7 @@ import cv2
 
 from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN, MobilenetDAN
 from face_alignment.model_zoo.loss import norm_mrse_loss, LandmarkMetric, NormalizeFactor
+from face_alignment.utils.cv2_utils import plot_kpt
 from face_alignment.utils.data_loader import ArrayDataset, PtsDataset, AFLW2000Dataset
 from face_alignment.utils.data_cropper import dan_preprocess, ImageCropper
 
@@ -62,8 +63,7 @@ def validate(net, pretrained_model, val_data, size, metric):
             print('The mean error for image {} is: {:.4f}, time: {:.4f}'.format(iter, test_err, time.time() - tic))
 
             img = np.squeeze(img_batch)
-            for s,t in kpts.reshape((-1, 2)):
-                img = cv2.circle(img, (int(s), int(t)), 1, (0), 2)
+            cv2.imshow("out", plot_kpt(img, kpts.reshape((-1, 2))))
             cv2.imshow("out", img)
             cv2.waitKey(50)
 
@@ -74,20 +74,20 @@ if __name__ == '__main__':
     cropper = ImageCropper((112, 112), 1.4, True, True)
     metric = LandmarkMetric(68, NormalizeFactor.PUPIL)
 
-    common_dataset = PtsDataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W",
-                                ["helen/testset", "lfpw/testset"],
-                                transform=dan_preprocess)
-    challenge_dataset = PtsDataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W",
-                                   ["ibug"],
-                                   transform=dan_preprocess)
+    common = PtsDataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W",
+                        ["helen/testset", "lfpw/testset"],
+                        transform=cropper)
+    challenge = PtsDataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W",
+                           ["ibug"],
+                           transform=cropper)
     aflw2000 = AFLW2000Dataset("/media/lirui/Personal/DeepLearning/FaceRec/LBF3000fps/datasets",
-                                   transform=dan_preprocess,
+                                   transform=cropper,
                                    verbose=False)
 
     stage = 2
     mean_shape = np.load("../../data/initLandmarks.npy")
 
-    for d in [common_dataset, challenge_dataset, aflw2000]:
+    for d in [common, challenge, aflw2000]:
         test_data = d(batch_size=1, shuffle=False, repeat_num=1)
         nSamples = len(d)
 

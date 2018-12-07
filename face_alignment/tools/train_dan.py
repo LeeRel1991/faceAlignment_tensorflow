@@ -149,14 +149,14 @@ if __name__ == '__main__':
 
     cropper = ImageCropper((112, 112), 1.4, True, True)
 
-    dataset_name = "300W_Augment"
+    dataset_name = "300WAugment"
     dataset_dir = "/media/lirui/Personal/DeepLearning/FaceRec/datasets/%s" % dataset_name
     dataset = PtsDataset(dataset_dir,
                          ["afw", 'helen/trainset', "lfpw/trainset"],
-                         transform=dan_preprocess, verbose=False)
+                         transform=cropper, verbose=False)
 
     batch_size = 32
-    num_epochs = 10
+    num_epochs = 100
 
     # learning_rate = tf.train.piecewise_constant(global_steps, [2000, 5000, 10000],
     #                                             [0.001, 0.0005, 0.0001])
