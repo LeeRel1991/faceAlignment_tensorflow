@@ -20,8 +20,9 @@ import time
 import cv2
 
 from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN, MobilenetDAN
-from face_alignment.model_zoo.loss import norm_mrse_loss, landmark_err
-from face_alignment.utils.data_loader import ArrayDataset, AFLW2000Dataset
+from face_alignment.model_zoo.loss import norm_mrse_loss, landmark_err, LandmarkMetric, NormalizeFactor
+from face_alignment.utils.data_cropper import ImageCropper
+from face_alignment.utils.data_loader import ArrayDataset, AFLW2000Dataset, PtsDataset
 
 gpu_mem_frac = 0.4
 gpu_id = 0
@@ -46,7 +47,7 @@ def validate(model, pretrained_model, val_data, size, metric):
     with tf.Session(config=tf.ConfigProto(gpu_options=_gpu_opts)) as sess:
         saver = tf.train.Saver(model.vars)
         # Writer = tf.summary.FileWriter("logs/", sess.graph)
-
+        tf.get_variable_scope().reuse_variables()
         saver.restore(sess, pretrained_model)
         print('Pre-trained model has been loaded!')
         errs = []
@@ -54,10 +55,10 @@ def validate(model, pretrained_model, val_data, size, metric):
         sess.run(iterator_op.initializer)
         for i in range(size):
             img_batch, gt_batch = sess.run(next_element)
-            in_batch = img_batch/255.
+
             tic = time.time()
 
-            kpts = sess.run(y_pred, feed_dict={x_placeholder: in_batch})
+            kpts = sess.run(y_pred, feed_dict={x_placeholder: img_batch})
             kpts = kpts[0, index, :2]
             test_err = metric(gt_batch[0], kpts)
 
@@ -67,8 +68,8 @@ def validate(model, pretrained_model, val_data, size, metric):
             img = np.squeeze(img_batch).astype(np.uint8)
             for s,t in kpts.reshape((-1, 2)):
                 img = cv2.circle(img, (int(s), int(t)), 1, (0), 2)
-            cv2.imshow("out", img)
-            cv2.waitKey(10)
+            # cv2.imshow("out", img)
+            # cv2.waitKey(10)
 
             print('The mean error for image {} is: {}'.format(i, test_err))
         errs = np.array(errs)
@@ -76,13 +77,24 @@ def validate(model, pretrained_model, val_data, size, metric):
 
 if __name__ == '__main__':
     from face_alignment.model_zoo.prnet import Resfcn256
-    test_dataset = AFLW2000Dataset("/media/lirui/Personal/DeepLearning/FaceRec/LBF3000fps/datasets")
-    test_data = test_dataset(batch_size=1, shuffle=False, repeat_num=1)
-    nSamples = len(test_dataset)
+    metric = LandmarkMetric(68, NormalizeFactor.DIAGONAL)
 
-    print("valid num ", nSamples)
-    stage = 2
+    cropper = ImageCropper((256, 256), 1.4, False, True)
+    common = PtsDataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W",
+                        ["helen/testset", "lfpw/testset"],
+                        transform=cropper)
+    challenge = PtsDataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W",
+                           ["ibug"],
+                           transform=cropper)
+    aflw2000 = AFLW2000Dataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets",
+                               ["AFLW2000-3D/0_30"],
+                               transform=cropper, verbose=False)
 
-    model = Resfcn256(256, 3)
-    validate(model, '/media/lirui/Personal/DeepLearning/FaceRec/PRNet/data/net-data/256_256_resfcn256_weight',
-             test_data, nSamples, landmark_err)
+    for d in [common, challenge, aflw2000]:
+        test_data = d(batch_size=1, shuffle=False, repeat_num=1)
+        nSamples = len(d)
+        print("valid num ", nSamples)
+
+        model = Resfcn256(256, 3)
+        validate(model, '/media/lirui/Personal/DeepLearning/FaceRec/PRNet/data/net-data/256_256_resfcn256_weight',
+                 test_data, nSamples, metric)
