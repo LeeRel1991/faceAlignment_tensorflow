@@ -18,10 +18,10 @@ import numpy as np
 
 def plot_kpt(image, kpt):
     """
-    Draw  key points
-    :param image: 图片
-    :param kpt: 关键点
-    :return: 画上关键点的图片
+    Draw  landmarks on a image
+    :param image: np.array, [h, w, ch]
+    :param kpt: np.array, [N_Landmark, 2]
+    :return:
     """
     image = image.copy()
     kpt = np.round(kpt).astype(np.int32)

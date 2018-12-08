@@ -19,10 +19,9 @@ import numpy as np
 import time
 import cv2
 
-from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN, MobilenetDAN
-from face_alignment.model_zoo.loss import norm_mrse_loss, landmark_err, LandmarkMetric, NormalizeFactor
 from face_alignment.utils.data_cropper import ImageCropper
 from face_alignment.utils.data_loader import ArrayDataset, AFLW2000Dataset, PtsDataset
+from face_alignment.utils.metric import LandmarkMetric, NormalizeFactor
 
 gpu_mem_frac = 0.4
 gpu_id = 0

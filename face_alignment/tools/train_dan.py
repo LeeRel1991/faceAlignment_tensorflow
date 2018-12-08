@@ -23,7 +23,7 @@ import time
 from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN, MobilenetDAN
 from face_alignment.model_zoo.loss import norm_mrse_loss
 
-from face_alignment.utils.data_cropper import dan_preprocess, ImageCropper
+from face_alignment.utils.data_cropper import ImageCropper
 from face_alignment.utils.log import Logger
 
 

@@ -18,7 +18,6 @@ import cv2
 import numpy as np
 
 from face_alignment.model_zoo.fan_2d import FAN2D
-from face_alignment.model_zoo.loss import norm_mrse_loss
 from face_alignment.utils.cv2_utils import plot_kpt
 from face_alignment.utils.data_cropper import ImageCropper
 from face_alignment.utils.data_utils import generate_hm, get_preds_from_hm

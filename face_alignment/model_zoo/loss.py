@@ -16,6 +16,8 @@ from enum import Enum
 
 import tensorflow as tf
 
+from face_alignment.utils.metric import mean_squared_error, root_mean_squared_error
+
 
 def norm_mrse_loss(gt_shape, pred_shape):
     """
@@ -65,91 +67,6 @@ def landmark_err(gt_lmk, pred_lmk, type="diagonal"):
     mse = np.mean(np.linalg.norm(gt_lmk - pred_lmk, axis=1)) / norm_dist
 
     return mse
-
-
-"""
-# Unfortunately the inter-ocular distance fails to give a meaningful localisation metric in the case of profile views as 
-it becomes a very small value 
-    
-"""
-
-
-class NormalizeFactor(Enum):
-    WITHOUT_NORM = 0
-    OCULAR = 1  # corner
-    PUPIL = 2
-    DIAGONAL = 3
-
-
-class LandmarkMetric:
-    """
-    The normalized average point-to-point Euclidean error  
-    (measured as the Euclidean distance between the outer corners of the eyes) will be used as the error measure.
-    """
-
-    def __init__(self, num_lmk=68, norm_type=None):
-        """
-        
-        Args:
-            num_lmk: 
-            norm_type: NormalizeFactor 
-            INTEROCULAR_DIS_NORM 300W metric  normalized by the inter-ocular distance 
-            DIAGONAL_DIS_NORM menpo metric normalized by the face diagonal
-            INTERPUPIL_DIS_NORM
-        """
-        self.num_lmk = num_lmk
-        self.norm_type = norm_type
-
-    def __call__(self, y, y_hat):
-        """
-        
-        Args:
-            y: np.array, [N_landmark, 2] 
-            y_hat: np.array, [N_Landmark, 2]
-
-        Returns:
-
-        """
-        avg_ptp_dis = np.mean(np.linalg.norm(y - y_hat, axis=1))
-        norm_dist = 1
-
-        if self.norm_type == NormalizeFactor.OCULAR or self.norm_type == NormalizeFactor.PUPIL:
-            assert y.shape[0] == 68, "number of landmark must be 68"
-
-        if self.norm_type == NormalizeFactor.PUPIL:
-            norm_dist = np.linalg.norm(np.mean(y[36:42], axis=0) - np.mean(y_hat[42:48], axis=0))
-
-        elif self.norm_type == NormalizeFactor.OCULAR:
-            norm_dist = np.linalg.norm(y[36] - y_hat[45])
-
-        elif self.norm_type == NormalizeFactor.DIAGONAL:
-            height, width = np.max(y, axis=0) - np.min(y_hat, axis=0)
-            norm_dist = np.sqrt(width ** 2 + height ** 2)
-
-        rmse = avg_ptp_dis / norm_dist
-        return rmse
-
-
-def mean_squared_error(y, y_hat):
-    """
-    mean squared error, unse
-    same with tf.losses.mean_squared_error
-    see https://blog.csdn.net/cqfdcw/article/details/78173839
-    矩阵做差，元素平方，整个矩阵求平均
-    Args:
-        y: [N_LANDMARK, 2]
-        y_hat: [N_LANDMARK, 2]
-
-    Returns: 
-
-    """
-    squared_diff = (y - y_hat) ** 2
-    mse = np.mean(squared_diff)
-    return mse
-
-
-def root_mean_squared_error(y, y_hat):
-    return np.sqrt(mean_squared_error(y, y_hat))
 
 
 if __name__ == '__main__':

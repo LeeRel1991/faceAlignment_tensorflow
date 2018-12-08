@@ -15,7 +15,6 @@
 import numpy as np
 import cv2
 
-
 _mean_img = np.load("../../data/meanImg.npy")
 _std_img = np.load("../../data/stdImg.npy")
 
@@ -35,6 +34,7 @@ class ImageCropper:
         where, the face_img is (112,112,1) and kpt is (68, 2) and can be used directly in training and tesing
      
     """
+
     def __init__(self, out_size, bbox_scale=1.4, gray=False, normalization=True):
         """
         
@@ -52,6 +52,12 @@ class ImageCropper:
 
     @classmethod
     def rescale_bbox(cls, src_bbox, scale=1.6):
+        """
+        enlarge the size of bounding box by a scale while keeping the center unchanged
+        :param src_bbox: original bounding box, list or tuple, [x1, y1, x2, y2]
+        :param scale: scale, default 1.6
+        :return: enlarged bounding box
+        """
         x1, y1, x2, y2 = src_bbox
         w, h = x2 - x1, y2 - y1
 
@@ -67,12 +73,11 @@ class ImageCropper:
     @classmethod
     def image_normalization(cls, img, mu=None, std=None):
         """
-
+        Normalize a image with mean value and standard deviation, i.e., 减均值，除以标准差
         Args:
-            img:np.array 
-            mu: 
-            std: 
-
+            img:np.array，for color image, conduct normalization on each channel separately
+            mu: mean value, if none, calculate on the whole image
+            std: standard deviation , if none, calculate on the whole image
         Returns:
 
         """
@@ -81,7 +86,7 @@ class ImageCropper:
         # 彩色图像通过除以255 进行规范化
         if len(img.shape) > 2:
             for ch in range(img.shape[2]):
-                img[:,:, ch] = cls.image_normalization(img[:,:,ch], 0, 255.0)
+                img[:, :, ch] = cls.image_normalization(img[:, :, ch], 0, 255.0)
             return img
 
         if mu is None: mu = np.mean(img)
@@ -114,63 +119,6 @@ class ImageCropper:
             face_img = self.image_normalization(face_img)
 
         return face_img, new_kpt
-
-
-def dan_preprocess(img, kpt):
-    x1, y1 = np.min(kpt, axis=0)
-    x2, y2 = np.max(kpt, axis=0)
-    w, h = x2 - x1, y2 - y1
-
-    old_size = (w + h) / 2
-    center = np.array([x2 - w / 2.0, y2 - h / 2.0])
-    size = int(old_size * 1.4)
-
-    new_x1, new_y1 = [max(0, int(v - size / 2)) for v in center]
-    new_y2, new_x2 = [min(v + size, max_v) for v, max_v in zip([new_y1, new_x1], img.shape[:2])]
-    new_x1, new_x2, new_y1, new_y2 = tuple(map(int, [new_x1, new_x2, new_y1, new_y2]))
-
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    face_img = img[new_y1: new_y2, new_x1: new_x2]
-    face_img = cv2.resize(face_img, (112, 112))
-    face_img = (face_img - np.std(face_img)) / np.mean(face_img)
-    face_img = face_img[:, :, np.newaxis]
-
-    new_kpt = np.copy(kpt)
-    new_kpt[:, 0] = new_kpt[:, 0] - new_x1
-    new_kpt[:, 1] = new_kpt[:, 1] - new_y1
-    new_kpt = new_kpt * 112 / size
-    return face_img, new_kpt
-    # def makerotate(angle):
-    #     rad = angle * np.pi / 180.0
-    #     return np.array([[np.cos(rad), np.sin(rad)], [-np.sin(rad), np.cos(rad)]], dtype=np.float32)
-    #
-    # x1, y1 = np.min(kpt, axis=0)
-    # x2, y2 = np.max(kpt, axis=0)
-    # w, h = x2 - x1, y2 - y1
-    # pts = (kpt - [x1, y1]) / [w, h]
-    #
-    # center = [0.5, 0.5]
-    #
-    # pts = pts - center
-    # pts = np.dot(pts, makerotate(np.random.normal(0, 20)))
-    # pts = pts * np.random.normal(0.8, 0.05)
-    # pts = pts + [np.random.normal(0, 0.05),
-    #              np.random.normal(0, 0.05)] + center
-    #
-    # pts = pts * 112
-    #
-    # R, T = getAffine(kpt, pts)
-    # M = np.zeros((2, 3), dtype=np.float32)
-    # M[0:2, 0:2] = R.T
-    # M[:, 2] = T
-    # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # face_img = cv2.warpAffine(img, M, (112, 112))
-    # face_img = (face_img - np.std(face_img)) / np.mean(face_img)
-    # face_img = face_img[:, :, np.newaxis].astype(np.float32)
-    #
-    # return face_img, pts.astype(np.float32)
-
 
 
 if __name__ == '__main__':

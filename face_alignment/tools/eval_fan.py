@@ -13,7 +13,6 @@
 @brief： 
 """
 
-
 import tensorflow as tf
 import numpy as np
 
@@ -21,10 +20,11 @@ import time
 import cv2
 
 from face_alignment.model_zoo.fan_2d import FAN2D
-from face_alignment.model_zoo.loss import LandmarkMetric, NormalizeFactor
+
 from face_alignment.utils.data_loader import PtsDataset, AFLW2000Dataset, LP300W_Dataset
 from face_alignment.utils.data_cropper import ImageCropper
 from face_alignment.utils.data_utils import get_preds_from_hm
+from face_alignment.utils.metric import LandmarkMetric, NormalizeFactor
 
 gpu_mem_frac = 0.4
 gpu_id = 0
@@ -62,13 +62,14 @@ def validate(net, pretrained_model, val_data, size, metric):
             print('The mean error for image {} is: {:.4f}, time: {:.4f}'.format(iter, test_err, time.time() - tic))
 
             img = np.squeeze(img_batch)
-            for s,t in kpts.reshape((-1, 2)):
+            for s, t in kpts.reshape((-1, 2)):
                 img = cv2.circle(img, (int(s), int(t)), 1, (0), 2)
             cv2.imshow("out", img)
             cv2.waitKey(100)
 
         errs = np.array(errs)
         print('The overall mean error is: {}'.format(np.mean(errs)))
+
 
 if __name__ == '__main__':
     cropper = ImageCropper((256, 256), 1.4, False, True)
@@ -81,8 +82,8 @@ if __name__ == '__main__':
                                    ["ibug"],
                                    transform=cropper)
     aflw2000 = AFLW2000Dataset("/media/lirui/Personal/DeepLearning/FaceRec/LBF3000fps/datasets",
-                                   transform=cropper,
-                                   verbose=False)
+                               transform=cropper,
+                               verbose=False)
     dataset = LP300W_Dataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W_LP",
                              ["AFW"],
                              transform=cropper, verbose=False)

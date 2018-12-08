@@ -20,10 +20,11 @@ import time
 import cv2
 
 from face_alignment.model_zoo.dan import MultiVGG, ResnetDAN, MobilenetDAN
-from face_alignment.model_zoo.loss import norm_mrse_loss, LandmarkMetric, NormalizeFactor
+
 from face_alignment.utils.cv2_utils import plot_kpt
 from face_alignment.utils.data_loader import ArrayDataset, PtsDataset, AFLW2000Dataset
-from face_alignment.utils.data_cropper import dan_preprocess, ImageCropper
+from face_alignment.utils.data_cropper import  ImageCropper
+from face_alignment.utils.metric import LandmarkMetric, NormalizeFactor
 
 gpu_mem_frac = 0.4
 gpu_id = 0
