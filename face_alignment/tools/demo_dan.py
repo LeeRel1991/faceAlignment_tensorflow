@@ -15,44 +15,67 @@
 
 import cv2
 import numpy as np
+import time
+
 from face_alignment.model_zoo.dan import MultiVGG
 import tensorflow as tf
 
 from face_alignment.utils.cv2_utils import plot_kpt
-
-mean_shape = np.load("/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/initLandmarks.npy")
-
-stage = 1
-model = MultiVGG(mean_shape, stage=stage, img_size=112, channel=1)
-
-x = tf.placeholder(tf.float32, shape=(1, 112, 112, 1))
-
-img = cv2.imread('/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/imgs/8_243.jpg')
-data = cv2.resize(img, (112, 112))
-data = cv2.cvtColor(data, cv2.COLOR_BGR2GRAY)
-xdata = data.astype(np.float32)
-mu = np.mean(data)
-std = np.std(data)
-data = (data - mu) / std
-data = data[np.newaxis, :, :, np.newaxis]
-
-y = model(x, is_training=False)["S1_Ret"]
+import os
 
 
-with tf.Session() as sess:
-    sess.run(tf.global_variables_initializer())
-    tf.train.Saver(model.vars).restore(sess, "../../model/dan_112")
+def img_preprocess(img):
+    """
+    Conduct gray, resize and normalization on a face image
+    Args:
+        img: np.array, bgr color face img, [h, w, 3]
 
-    kpts = sess.run(y, feed_dict={x: data})
+    Returns: [1, 112, 112, 1] gray, normalized version
 
-    print(y.shape)
+    """
+    out = cv2.resize(img, (112, 112))
+    out = cv2.cvtColor(out, cv2.COLOR_BGR2GRAY)
 
-    # draw and display
-    kpts = kpts.reshape(-1, 2) * img.shape[0] / 112
+    mu = np.mean(out)
+    std = np.std(out)
+    out = (out - mu) / std
+    out = out[np.newaxis, :, :, np.newaxis]
+    return out
 
-    cv2.imshow("out", plot_kpt(img, kpts))
-    cv2.waitKey(0)
+
+def demo_folder(net, img_folder):
+    x = tf.placeholder(tf.float32, shape=(1, 112, 112, 1))
+    y = net(x, s1_istrain=False, s2_istrain=False)["S%d_Ret" % net.stage]
+
+    files = os.listdir(img_folder)
+
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        tf.train.Saver(net.vars).restore(sess, "../../model/%s_%s" % (net, "300WAugment"))
+
+        total_duration = 0.0
+        for filename in files:
+            img = cv2.imread(os.path.join(img_folder, filename))
+            in_data = img_preprocess(img)
+
+            tic = time.time()
+            kpts = sess.run(y, feed_dict={x: in_data})
+            duration = time.time() - tic
+
+            total_duration += duration
+            print("forward time for image {} is {:.4f}".format(filename, duration))
+
+            # back to original img
+            kpts = kpts.reshape(-1, 2) * img.shape[0] / 112
+
+            # draw and display
+            cv2.imshow("out", plot_kpt(img, kpts))
+            cv2.waitKey(0)
+        print("the average time for {} images is {:.4f}".format(len(files), total_duration / len(files)))
 
 
 if __name__ == '__main__':
-    pass
+    stage = 2
+    mean_shape = np.load("../../data/initLandmarks.npy")
+    net = MultiVGG(mean_shape, stage=stage, img_size=112, channel=1)
+    demo_folder(net, "../../data/imgs/")

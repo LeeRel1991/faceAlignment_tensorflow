@@ -38,19 +38,21 @@ __faceAlignment_tensorflow__ 基于tensorflow 实现了现有先进的人脸对�
 
 * MSE normalized by pupil distance
 
-|网络|stage|300W-common| 300W-challege |AFLWW2000 |speed(ms/face) | 显存占用(%)
-|:---|:---|:---|:---|:---|:---|:---
-dan_vgg_112_300W| 1/2 | 1| 14 | 14 | 1.3 | 65
-dan_vgg_112_300WAugment| 1/2 | 7.43/6.10 | 14.99/11.40 |  49.013/40.23 | 3-5 |25
-dan_resnet_112_300WAugment| 1/2 | 8.933/0.06133| 13.430/11.345 | 44.712/44.072 | 4-7 |
-dan_mobilenet_112_300WAugment| 1/2 | 8.323/8.294| 14.892/14.617 |48.134/47.506 | 2-5 |
-prnet_256_300WLP| - | 7.607| 14.631 | 14.988 | 10 | 75
-dan_resnet_112_300WAugment| 1/2 | 1| 32 | 8 | 1.3 | 78
+|网络|stage|300W-common| 300W-challege |AFLWW2000 |speed(ms/face)
+|:---|:---|:---|:---|:---|:---
+dan_vgg_112_300WAugment(paper)| -/2 | -/4.42 | -/4.57 |  - | -
+dan_vgg_112_300W| 1/2 | -| - | - | - | -
+dan_vgg_112_300WAugment| 1/2 | 5.16/4.82 | 10.08/9.64 |  22.67/23.68 | 3-5
+dan_mobilenet_112_300WAugment| 1/2 | -| - | -
+prnet_256_300WLP(paper)| - | 7.47| 14.99 | 6.30 | 10 | 75
+
 
 * MSE normalized by diagonal box distance
 
-|网络|stage|300W-common| 300W-challege |AFLWW2000 |speed(ms/face) | 显存占用(%)
-|:---|:---|:---|:---|:---|:---|:---
-prnet_256_300WLP(paper)| - |2.22 |  3.67 | 2.3 | 10 | -
-FAN_256_300WLP(paper)| - |- |  - | 3.38 | 10 | -
-FAN_256_300WLP(train)| - |2.15 |  3.68 | 2.57 | 25 | -
+|网络|stage|300W-common| 300W-challege |AFLWW2000 |speed(ms/face)
+|:---|:---|:---|:---|:---|:---
+dan_vgg_112_300WAugment(paper)| 1/2 | -/1.35 | -/2.00 |  - | -
+dan_vgg_112_300WAugment| 1/2 | 1.56/1.45 | 2.62/2.48 |  4.49/4.37 | 5/20
+prnet_256_300WLP(paper)| - |2.22 |  3.67 | 2.3 | 10
+FAN_256_300WLP(paper)| - |- |  - | 3.38 | 10
+FAN_256_300WLP| - |2.15 |  3.68 | 2.57 | 25

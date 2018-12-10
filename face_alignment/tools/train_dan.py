@@ -159,8 +159,8 @@ if __name__ == '__main__':
     num_epochs = 100
 
     # learning_rate = tf.train.piecewise_constant(global_steps, [2000, 5000, 10000],
-    #                                             [0.001, 0.0005, 0.0001])
-    learning_rate = tf.train.exponential_decay(0.001, global_steps, 1000, 0.96, staircase=True)
+    #                                             [0.001, 0.0005, 0.0001, 0.00001])
+    learning_rate = tf.train.exponential_decay(0.001, global_steps, 1000, 0.96, staircase=False)
 
     stage = 2
     logger.addLog("total samples: %d" % len(dataset))

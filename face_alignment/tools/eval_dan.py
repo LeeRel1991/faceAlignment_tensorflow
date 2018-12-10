@@ -64,16 +64,16 @@ def validate(net, pretrained_model, val_data, size, metric):
             print('The mean error for image {} is: {:.4f}, time: {:.4f}'.format(iter, test_err, time.time() - tic))
 
             img = np.squeeze(img_batch)
+
             cv2.imshow("out", plot_kpt(img, kpts.reshape((-1, 2))))
-            cv2.imshow("out", img)
             cv2.waitKey(50)
 
         errs = np.array(errs)
-        print('The overall mean error is: {}'.format(np.mean(errs)))
+        print('The overall mean error is: {:.2f}'.format(np.mean(errs)))
 
 if __name__ == '__main__':
     cropper = ImageCropper((112, 112), 1.4, True, True)
-    metric = LandmarkMetric(68, NormalizeFactor.PUPIL)
+    metric = LandmarkMetric(68, NormalizeFactor.DIAGONAL)
 
     common = PtsDataset("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W",
                         ["helen/testset", "lfpw/testset"],
