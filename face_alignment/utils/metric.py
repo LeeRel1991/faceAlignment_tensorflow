@@ -78,7 +78,7 @@ class LandmarkMetric:
             height, width = np.max(y, axis=0) - np.min(y_hat, axis=0)
             norm_dist = np.sqrt(width ** 2 + height ** 2)
 
-        rmse = avg_ptp_dis / norm_dist
+        rmse = avg_ptp_dis *100 / norm_dist
         return rmse
 
 

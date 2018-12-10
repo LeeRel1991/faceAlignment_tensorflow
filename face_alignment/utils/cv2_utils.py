@@ -28,7 +28,10 @@ def plot_kpt(image, kpt):
 
     for i in range(kpt.shape[0]):
         st = kpt[i, :2]
-        image = cv2.circle(image, (st[0], st[1]), 1, (0, 0, 255), 2)
+        if image.ndim == 2:
+            image = cv2.circle(image, (st[0], st[1]), 1, (0), 2)
+        else:
+            image = cv2.circle(image, (st[0], st[1]), 1, (0, 0, 255), 2)
 
     return image
 
