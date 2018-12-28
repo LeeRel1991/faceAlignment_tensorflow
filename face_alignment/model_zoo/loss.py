@@ -36,6 +36,32 @@ def norm_mrse_loss(gt_shape, pred_shape):
     return cost
 
 
+def wing_loss(gt_shape, pred_shape, w=10, sigma=2):
+    """
+    
+    Args:
+        gt_shape: [N_Landmark, 2] 
+        pred_shape: [N_Landmark, 2] 
+        w: 
+        sigma: 
+    
+    Returns:
+    See https://blog.csdn.net/wfei101/article/details/80634167?utm_source=blogxgwz0
+    """
+    w = tf.constant(w, dtype=tf.float32)
+    sigma = tf.constant(sigma, dtype=tf.float32)
+    abs_diff = tf.abs(gt_shape - pred_shape)
+    c = w - w * tf.log(1 + w / sigma)
+
+    # tf.less 返回 True or False； a<b,返回True， 否则返回False。
+    smoothL1_sign = tf.stop_gradient(tf.to_float(tf.less(abs_diff, w)))
+    print(smoothL1_sign)
+    loss = w * (tf.log(1 + abs_diff / sigma)) * smoothL1_sign + (abs_diff - c)
+
+    loss = tf.reduce_sum(loss)
+    return loss
+
+
 import numpy as np
 
 
@@ -70,8 +96,8 @@ def landmark_err(gt_lmk, pred_lmk, type="diagonal"):
 
 
 if __name__ == '__main__':
-    a = np.array([[4.0, 4.0], [3.0, 3.0], [1.0, 1.0]])
-    b = np.array([[1.0, 1.0], [1.0, 1.0], [2.0, 2.0]])
+    a = np.array([[4.0, 4.0], [3.0, 3.0], [1.0, 1.0]], dtype=np.float32)
+    b = np.array([[1.0, 1.0], [1.0, 1.0], [2.0, 2.0]], dtype=np.float32)
     print(a)
     print(b)
     # mse = np.mean(np.sqrt(np.sum((a-b)**2, axis=1))
@@ -90,9 +116,14 @@ if __name__ == '__main__':
 
     l2loss = tf.nn.l2_loss(a - b)
     mse2 = tf.losses.mean_squared_error(a, b)
+
+    wloss = wing_loss(a, b, 10, 2)
     with tf.Session() as sess:
         print(sess.run(c))
         print()
         print(sess.run(mse))
         print()
         print(sess.run(mse2))
+        w = sess.run(wloss)
+        print("ww", w)
+        print("wing ", wloss)

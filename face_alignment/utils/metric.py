@@ -78,7 +78,7 @@ class LandmarkMetric:
             height, width = np.max(y, axis=0) - np.min(y_hat, axis=0)
             norm_dist = np.sqrt(width ** 2 + height ** 2)
 
-        rmse = avg_ptp_dis *100 / norm_dist
+        rmse = avg_ptp_dis * 100 / norm_dist
         return rmse
 
 
@@ -102,6 +102,36 @@ def mean_squared_error(y, y_hat):
 
 def root_mean_squared_error(y, y_hat):
     return np.sqrt(mean_squared_error(y, y_hat))
+
+
+def generate_CED_curve(errors, failure_threshold, step=0.0001, showCurve=False):
+    """
+    plot cumulative error distribution curve 
+    Args:
+        errors: point-to-point mse list on a testset, percentage 
+        failure_threshold: threshold to judge a failure sample with mse, if mse > threshold, then the sample is failure  
+        step: 
+        showCurve: 
+
+    Returns: area under the curve, AUC
+    References https://github.com/MarekKowalski/DeepAlignmentNetwork/blob/master/DeepAlignmentNetwork/tests.py
+    """
+    from scipy.integrate import simps
+    from matplotlib import pyplot as plt
+    nErrors = len(errors)
+    xAxis = list(np.arange(0., failure_threshold + step, step))
+
+    ced = [float(np.count_nonzero([errors <= x])) / nErrors for x in xAxis]
+
+    AUC = simps(ced, x=xAxis) / failure_threshold
+    failureRate = 1. - ced[-1]
+
+    print("AUC @ {0}: {1}".format(failure_threshold, AUC))
+    print("Failure rate: {0}".format(failureRate))
+
+    if showCurve:
+        plt.plot(xAxis, ced)
+    plt.show()
 
 
 if __name__ == '__main__':
