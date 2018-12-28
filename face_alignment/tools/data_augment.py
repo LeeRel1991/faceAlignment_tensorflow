@@ -153,7 +153,7 @@ class DataAugment:
 
         else:
             # gray img
-            outImg = affine_transform(img, A2, t2[[1, 0]], output_shape=out_size)
+            outImg = affine_transform(img, A2, t2[[1, 0]], output_shape=self.out_size)
 
         init_shape = np.dot(init_shape, A) + t
         gt_kpt = np.dot(gt_kpt, A) + t
@@ -239,8 +239,10 @@ class DataAugment:
         src_imgs = [src_img]
         src_kpts = [src_kpt]
         if self.mirror:
-            src_imgs.append(np.fliplr(src_img))
-            src_kpts.append(mirrorShape(src_kpt, src_img.shape))
+            img_mirror = np.fliplr(src_img)
+            kpt_mirror = mirrorShape(src_kpt, src_img.shape)
+            src_imgs.append(img_mirror)
+            src_kpts.append(kpt_mirror)
 
         for img, kpt in zip(src_imgs, src_kpts):
             fitted_kpt = self.best_fit_rect(kpt)
@@ -257,7 +259,8 @@ class DataAugment:
                 tmp_fitted = np.dot(R, (tmp_fitted - tmp_fitted.mean(axis=0)).T).T + tmp_fitted.mean(axis=0)
 
                 temp_img, _, temp_gt = self.crop_resize_rotate(img, tmp_fitted, kpt)  # 位移0.2，旋转20度，放缩+-0.25
-
+                cv2.imshow("src", plot_kpt(temp_img / 255, temp_gt))
+                cv2.waitKey(500)
                 new_imgs.append(temp_img)
                 new_kpts.append(temp_gt)
 
@@ -271,7 +274,7 @@ def main(root: str, db_names: list, out_root: str, augment_params: dict):
                             augment_params["num"],
                             augment_params["perturbations"],
                             augment_params["out_size"],
-                            augment_params["mirror"])
+                            mirror=augment_params["mirror"])
 
     db_names = [x for x in os.listdir(root)] if db_names is None else db_names
     exts = ['.jpg', '.jpeg', '.png']
@@ -309,13 +312,13 @@ def main(root: str, db_names: list, out_root: str, augment_params: dict):
                 np.savetxt(prefix.format('.pts'), t_kpt,
                            header='version: 1\nn_points:  68\n{',
                            footer='}', comments='')
-
-                # cv2.imshow("src", plot_kpt(t_img / 255, t_kpt))
-                # cv2.waitKey(500)
+                print(t_img.shape)
+                cv2.imshow("out", plot_kpt(t_img / 255, t_kpt))
+                cv2.waitKey(500)
 
 
 if __name__ == '__main__':
     main("/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W",
          ["afw", "helen/trainset", "lfpw/trainset"],
-         "/media/lirui/Personal/DeepLearning/FaceRec/datasets/300W_Augment",
+         "/media/lirui/Personal/DeepLearning/FaceRec/datasets/300WAugment",
          dict(num=5, perturbations=[0.2, 0.2, 20, 0.25], out_size=[256, 256], mirror=True))

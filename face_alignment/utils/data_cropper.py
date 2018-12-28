@@ -102,7 +102,8 @@ class ImageCropper:
             x2, y2 = [min(v, m) for v, m in zip([x2, y2], img.shape[:2][::-1])]
 
         face_img = img[y1:y2, x1:x2, :]
-        face_img = cv2.resize(face_img, self.out_size)
+        if face_img.shape[:2][::-1] != self.out_size:
+            face_img = cv2.resize(face_img, self.out_size)
 
         x_scale = self.out_size[1] / (x2 - x1)
         y_scale = self.out_size[0] / (y2 - y1)
