@@ -15,9 +15,6 @@
 import numpy as np
 import cv2
 
-_mean_img = np.load("../../data/meanImg.npy")
-_std_img = np.load("../../data/stdImg.npy")
-
 
 class ImageCropper:
     """
