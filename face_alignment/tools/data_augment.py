@@ -268,7 +268,7 @@ class DataAugment:
 
 
 def main(root: str, db_names: list, out_root: str, augment_params: dict):
-    mean_shape = np.load("/media/lirui/Personal/DeepLearning/FaceRec/DAN/data/meanFaceShape.npz")["meanShape"]
+    mean_shape = np.load("../../data/meanFaceShape.npz")["meanShape"]
 
     augmenter = DataAugment(mean_shape,
                             augment_params["num"],

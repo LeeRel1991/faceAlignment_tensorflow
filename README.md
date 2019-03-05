@@ -41,7 +41,7 @@ __faceAlignment_tensorflow__ 基于tensorflow 实现了现有先进的人脸对�
 |网络|stage|300W-common| 300W-challege |AFLWW2000 |speed(ms/face)
 |:---|:---|:---|:---|:---|:---
 dan_vgg_112_300WAugment(paper)| -/2 | -/4.42 | -/4.57 |  - | -
-dan_vgg_112_300W| 1/2 | -| - | - | - | -
+dan_vgg_112_300W| 1/2 | 5.73/5.43| 14.19/13.39 | 40.32/38.90 | -
 dan_vgg_112_300WAugment| 1/2 | 5.16/4.82 | 10.08/9.64 |  22.67/23.68 | 3-5
 dan_mobilenet_112_300WAugment| 1/2 | 6.97/5.29| 12.37/9.65 | 24.19/24.35
 prnet_256_300WLP(paper)| - | 7.47| 14.99 | 6.30 | 10 | 75
@@ -55,5 +55,17 @@ dan_vgg_112_300WAugment(paper)| 1/2 | -/1.35 | -/2.00 |  - | -
 dan_vgg_112_300WAugment| 1/2 | 1.56/1.45 | 2.62/2.48 |  4.49/4.37 | 5/20
 dan_mobilenet_112_300WAugment| 1/2 | 2.11/2.09| 3.10/3.19 | 4.91/4.90
 prnet_256_300WLP(paper)| - |2.22 |  3.67 | 2.3 | 10
-FAN_256_300WLP(paper)| - |- |  - | 3.38 | 10
+prnet_256_300WLP| - |2.87 |  4.48 | 2.52 | 10
+FAN_256_300WLP(paper)| - |- |  - | 3.38 | 45
 FAN_256_300WLP| - |2.15 |  3.68 | 2.57 | 25
+
+__注__
+
+1. the public FAN trained model uses a hierarchical,parallel & MS resblock instead of standard bottleneck, thus the speed is slower.
+2. PRNet 论文中采用的指标是`MSE normalized by bbox size`, 而不是bbox的对角尺寸(diagonal size), 因此，与论文描述的相比，此处采用作者公布的预训练模型计算的结果相差`sqrt(2)`倍，
+
+
+#### References
+* Original DAN implementation: https://github.com/MarekKowalski/DeepAlignmentNetwork
+* DAN tensorflow implementation: https://github.com/mariolew/Deep-Alignment-Network-tensorflow
+
